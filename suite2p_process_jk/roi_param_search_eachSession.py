@@ -141,7 +141,7 @@ for mi in [0,8]:
                 # Pick the best, and then run the 2nd round. 0.1 resolution
                 numroiArray = np.array(list(numroi.values()))[:,0]
                 maxind = np.argmax(numroiArray)
-                maxthreshold = list(numroi.keys())[maxind]
+                maxthreshold = int(list(numroi.keys())[maxind]*10)/10
                 
                 thresholdList = [maxthreshold-0.1, maxthreshold+0.1]
                 for threshold in thresholdList:
@@ -160,7 +160,7 @@ for mi in [0,8]:
                 # Pick the best, and then run the 3rd round. 0.05 resolution
                 numroiArray = np.array(list(numroi.values()))[:,0]
                 maxind = np.argmax(numroiArray)
-                maxthreshold = list(numroi.keys())[maxind]
+                maxthreshold = int(list(numroi.keys())[maxind]*10)/10
                 
                 thresholdList = [maxthreshold-0.05, maxthreshold+0.05]
                 for threshold in thresholdList:
