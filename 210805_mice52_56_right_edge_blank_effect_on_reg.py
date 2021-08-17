@@ -26,7 +26,7 @@ from suite2p.io.binary import BinaryFile
 import gc
 gc.enable()
 
-h5Dir = 'D:/TPM/JK/h5/'
+h5Dir = 'P:/'
 fastDir = 'C:/JK/' # This better be in SSD
 # mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
 # refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
@@ -51,9 +51,9 @@ ops['move_bin'] = True
 BE EXTREMELY CAREFULL!! 
 OG FILE CAN BE OVERWRITTEN!!
 '''
-mouse = 52
-pn = 4
-session = 29 # select from 1,4, 6:29, only from regular sessions (spont and piezo sessions need much more computation, and it's not worth it)
+mouse = 53
+pn = 1
+session = 15 # select from 1,4, 6:29, only from regular sessions (spont and piezo sessions need much more computation, and it's not worth it)
 planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
 
 fnOG = f'{mouse:03}_{session:03}_000_plane_{pn}.h5'
@@ -65,33 +65,34 @@ with h5py.File(f'{planeDir}{fnNew}', 'w') as f:
     f['data'] = data
 # plt.imshow(data.astype(np.float64).mean(axis=0))
 
-#%% Check new h5 file
+# Check new h5 file
 with h5py.File(f'{planeDir}{fnOG}', 'r') as f:
     data = np.array(f['data'])
 with h5py.File(f'{planeDir}{fnNew}', 'r') as f:
     newdata = np.array(f['data'])
 
-c = data[:newdata.shape[0], :newdata.shape[1], :newdata.shape[2]] - newdata
+c = data[:, :newdata.shape[1], :newdata.shape[2]] - newdata
 print(any(c.flatten())) # This should be 'False'
+
+
+# Run suite2p on the new file
+if not any(c.flatten()):
+    print('Run suite2p on the x.h5 file.')
+    db = {'h5py': f'{planeDir}{fnNew}',
+        'h5py_key': ['data'],
+        'data_path': [],
+        'save_path0': planeDir,
+        'save_folder': f'{session:03}x',
+        'fast_disk': f'{fastDir}',
+        'roidetect': False,
+    }
+    run_s2p(ops,db)
+    rawbinFn = f'{planeDir}{session:03}x/plane0/data_raw.bin'
+    os.remove(rawbinFn)
 del c
-
-#%% Run suite2p on the new file
-db = {'h5py': f'{planeDir}{fnNew}',
-    'h5py_key': ['data'],
-    'data_path': [],
-    'save_path0': planeDir,
-    'save_folder': f'{session:03}x',
-    'fast_disk': f'{fastDir}',
-    'roidetect': False,
-}
-run_s2p(ops,db)
-rawbinFn = f'{planeDir}{session:03}x/plane0/data_raw.bin'
-os.remove(rawbinFn)
-
+    
 #%% Compare the quality to the OG file
-# How....?
-
-#%% (1) Visual inspection of the mean image
+# (1) Visual inspection of the mean image
 # Is there any difference?
 
 opsfnOG = f'{planeDir}{session:03}/plane0/ops.npy'
@@ -150,3 +151,119 @@ plt.title(f'JK{mouse:03} plane{pn} session {session:03}\n OG - New: {meanVal:.4f
 #%% Showing the OG mean image
 # napari.view_image(opsOG['meanImg'])
 plt.imshow(opsOG['meanImg'], cmap='gray')
+
+
+#%% Since it works, run suite2p on multiple (randomly selected) sessions
+mice = [53,54,56]
+sessions = [[3,7,13,19], [1,7,11,21,26], [0,2,5,10]]
+for mi, mouse in enumerate(mice):
+    for pn in range(1,9):
+        planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+        for session in sessions[mi]:
+            fnOG = f'{mouse:03}_{session:03}_000_plane_{pn}.h5'
+            fnNew = f'{mouse:03}_{session:03}x_000_plane_{pn}.h5'
+            
+            if not os.path.isfile(f'{planeDir}{fnNew}'):
+                with h5py.File(f'{planeDir}{fnOG}', 'r') as f:
+                    data = f['data'][:,:,:-rightBlank]
+                with h5py.File(f'{planeDir}{fnNew}', 'w') as f:
+                    f['data'] = data
+                # plt.imshow(data.astype(np.float64).mean(axis=0))
+            
+            newDir = f'{planeDir}{session:03}x/'
+            if not (os.path.isdir(newDir) & os.path.isfile(f'{newDir}plane0/ops.npy')
+                    & os.path.isfile(f'{newDir}plane0/data.bin')):
+                # Check new h5 file
+                with h5py.File(f'{planeDir}{fnOG}', 'r') as f:
+                    data = np.array(f['data'])
+                with h5py.File(f'{planeDir}{fnNew}', 'r') as f:
+                    newdata = np.array(f['data'])
+                
+                c = data[:newdata.shape[0], :newdata.shape[1], :newdata.shape[2]] - newdata
+                
+                # Run suite2p on the new file
+                if not any(c.flatten()):
+                    print(f'Running suite2p: JK{mouse:03} plane {pn} session {session}')
+                    db = {'h5py': f'{planeDir}{fnNew}',
+                        'h5py_key': ['data'],
+                        'data_path': [],
+                        'save_path0': planeDir,
+                        'save_folder': f'{session:03}x',
+                        'fast_disk': f'{fastDir}',
+                        'roidetect': False,
+                    }
+                    run_s2p(ops,db)
+                    rawbinFn = f'{planeDir}{session:03}x/plane0/data_raw.bin'
+                    os.remove(rawbinFn)
+                    del c
+                else:
+                    raise(f'Error at JK{mouse:03} plane {pn} session {session}')
+
+#%% Check the result, collectively
+ycrop = 30
+xcrop = 60
+diffImgList = []
+mixImgList = []
+for mi, mouse in enumerate(mice):
+    for pn in range(1,9):
+        planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+        f, ax = plt.subplots(3,2,sharex=True, sharey=True)
+        for si, session in enumerate(sessions[mi]):
+            opsfnOG = f'{planeDir}{session:03}/plane0/ops.npy'
+            binfnOG = f'{planeDir}{session:03}/plane0/data.bin'
+            
+            opsfnNew = f'{planeDir}{session:03}x/plane0/ops.npy'
+            binfnNew = f'{planeDir}{session:03}x/plane0/data.bin'
+            
+            opsOG = np.load(opsfnOG, allow_pickle=True).item()
+            opsNew = np.load(opsfnNew, allow_pickle=True).item()
+            
+            OGmimg = opsOG['meanImg'][:,:-rightBlank]
+            newmimg = opsNew['meanImg']
+                        
+            miximg = np.zeros((OGmimg.shape[0],OGmimg.shape[1],3), np.int32)
+            miximg[:,:,0] = OGmimg.astype(np.int32)
+            miximg[:,:,2] = OGmimg.astype(np.int32)
+            miximg[:,:,1] = newmimg.astype(np.int32)
+            mixImgList.append(miximg)
+            
+            diffImg = OGmimg - newmimg
+            diffImgList.append(diffImg)
+
+            # (2) Correlation value between each frame and the ref img            
+            template = opsOG['refImg'][ycrop:-ycrop,xcrop:-xcrop-rightBlank].flatten()
+            corrOG = np.zeros((opsOG['nframes'],))
+            with BinaryFile(Ly = opsOG['Ly'], Lx = opsOG['Lx'], read_filename = binfnOG) as f:
+                data = f.data[:,ycrop:-ycrop,xcrop:-xcrop-rightBlank]
+                for i in range(data.shape[0]):
+                    frame = data[i,:,:]
+                    corrOG[i] = np.corrcoef(frame.flatten(),template)[0,1]
+            
+            template = opsNew['refImg'][ycrop:-ycrop,xcrop:-xcrop].flatten()
+            corrNew = np.zeros((opsNew['nframes'],))
+            with BinaryFile(Ly = opsNew['Ly'], Lx = opsNew['Lx'], read_filename = binfnNew) as f:
+                data = f.data[:,ycrop:-ycrop,xcrop:-xcrop]
+                for i in range(data.shape[0]):
+                    frame = data[i,:,:]
+                    corrNew[i] = np.corrcoef(frame.flatten(),template)[0,1]
+                    
+            meanVal = (corrOG - corrNew).mean()
+            stdVal = (corrOG - corrNew).std()
+            
+            inds = np.unravel_index(si,(3,2))
+            tempax = ax[inds[0],inds[1]]
+            tempax.plot(corrOG)
+            tempax.plot(corrNew)
+            tempax.legend(['OG', 'New'])
+            tempax.set_xlabel('Frame')
+            tempax.set_ylabel('Intensity correlation')
+            tempax.set_title(f'JK{mouse:03} plane{pn} session {session:03}\n OG - New: {meanVal:.4f} $\pm$ {stdVal:.4f}')
+        f.tight_layout()
+
+# viewer = napari.Viewer()
+# viewer.add_image(diffImgList)
+# viewer.add_image(mixImgList, rgb=True)
+
+'''
+All looks good!
+'''
