@@ -462,6 +462,233 @@ for sn in sessionFolderNames:
     viewer.add_image(np.array(upperRegimgList), name=sn)
     
 
+'''
+The results look so much better than before.
+Very few actually hit the maximum limited translation (20 pixels)
+'''
+
+#%% Run within-session and between-plane registration again, 
+# using edge removal and limit on the translation pixels.
+# Save with the same filenames (override previous results)
+# 
+''' Error corrected for edge trimming on 08/13/2021. Corrval should be changed for JK025,036,052'''
+''' mean_img_reg_{sn}_upper.npy, mean_img_reg_{sn}_lower.npy, saved in {h5Dir}{mouse:03} '''
+edgeRem = 0.1 # Proportion of image in each axis to remove before registration
+transLim = 20 # Number of pixels to limit translation for registration
+
+op = {}
+op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P recordings
+op['maxregshift'] = 0.3
+op['smooth_sigma_time'] = 0
+
+def same_session_planes_reg(mouse, sessionName, startPlane, edgeRem = 0.1, transLim = 20):
+    mimgList = []
+    regimgList = []
+    corrVals = np.zeros((4,4))   
+    for i, pi in enumerate(range(startPlane,startPlane+4)):
+        piDir = f'{h5Dir}{mouse:03}/plane_{pi}/{sessionName}/plane0/'
+        piBinFn = f'{piDir}data.bin'
+        piOpsFn = f'{piDir}ops.npy'
+        opsi = np.load(piOpsFn, allow_pickle=True).item()
+        Lx = opsi['Lx']
+        Ly = opsi['Ly']
+        piImg = opsi['meanImg'].copy().astype(np.float32)
+        if mouse > 50:
+            piImg = piImg[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1-70] # 052 has blank edge on the right end for ~70 pix
+        else:
+            piImg = piImg[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1] # Ly is always shorter than Lx
+        rmin, rmax = np.percentile(piImg,1), np.percentile(piImg,99)
+        piImg = np.clip(piImg, rmin, rmax)
+        mimgList.append(piImg)
+        for j, pj in enumerate(range(startPlane,startPlane+4)):
+            if pi == pj: # same plane correlation
+                nframes = opsi['nframes']
+                with BinaryFile(Ly = Ly, Lx = Lx, read_filename = piBinFn) as f:
+                    inds1 = range(int(nframes/3))
+                    frames = f.ix(indices=inds1).astype(np.float32)
+                    mimg1 = frames.mean(axis=0)
+                    if mouse > 50:
+                        mimg1 = mimg1[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1-70] # 052 has blank edge on the right end for ~70 pix
+                    else:
+                        mimg1 = mimg1[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1] # Ly is always shorter than Lx
+                    rmin, rmax = np.percentile(mimg1,1), np.percentile(mimg1,99)
+                    mimg1 = np.clip(mimg1, rmin, rmax)
+    
+                    inds2 = range(int(nframes/3*2), nframes)
+                    frames = f.ix(indices=inds2).astype(np.float32)
+                    mimg2 = frames.mean(axis=0)
+                    if mouse > 50:
+                        mimg2 = mimg2[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1-70] # 052 has blank edge on the right end for ~70 pix
+                    else:
+                        mimg2 = mimg2[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1] # Ly is always shorter than Lx
+                    rmin, rmax = np.percentile(mimg2,1), np.percentile(mimg2,99)
+                    mimg2 = np.clip(mimg2, rmin, rmax)
+                    corrVals[i,i] = np.corrcoef(mimg1.flatten(), mimg2.flatten())[0,1]
+            elif pj > pi: # different plane correlation, after rigid registration
+                pjDir = f'{h5Dir}{mouse:03}/plane_{pj}/{sn}/plane0/'
+                pjOpsFn = f'{pjDir}ops.npy'
+                opsj = np.load(pjOpsFn, allow_pickle=True).item()
+                pjImg = opsj['meanImg'].copy().astype(np.float32)
+                if mouse > 50:
+                    pjImg = pjImg[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1-70] # 052 has blank edge on the right end for ~70 pix
+                else:
+                    pjImg = pjImg[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1] # Ly is always shorter than Lx
+                rmin, rmax = np.percentile(pjImg,1), np.percentile(pjImg,99)
+                pjImg = np.clip(pjImg, rmin, rmax)
+                    
+                # rigid registration
+                ymax, xmax,_,_,_ = phase_corr(piImg, pjImg, transLim)
+                pjImgReg = rigid.shift_frame(frame=pjImg, dy=ymax, dx=xmax)
+                # corrVals[i,j] = np.corrcoef(piImg.flatten(), pjImgReg.flatten())[0,1] # This is wrong. Need to clip transLim
+                corrVals[i,j] = np.corrcoef(piImg[transLim:-transLim, transLim:-transLim].flatten(), 
+                                            pjImgReg[transLim:-transLim, transLim:-transLim].flatten())[0,1] # 2021/08/13.
+                regimgList.append(pjImgReg)
+    return mimgList, regimgList, corrVals
+
+for mi in [0,3,8]:
+# for mi in [0]:    
+    mouse = mice[mi]
+    refSession = refSessions[mi]
+    
+    # upper volume first
+    # Make a list of session names and corresponding files
+    pn = 1
+    planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+    sessionNames = get_session_names(planeDir, mouse, pn)
+    nSessions = len(sessionNames)
+    upperCorr = np.zeros((4,4,nSessions))
+    sessionFolderNames = [x.split('_')[1] if len(x.split('_')[1])==3 else x[4:] for x in sessionNames]
+    for i, sn in enumerate(sessionFolderNames):
+        print(f'Processing JK{mouse:03} upper volume, session {sn}.')
+        upperMimgList, upperRegimgList, upperCorr[:,:,i] = same_session_planes_reg(mouse, sn, pn)
+        upper = {}
+        upper['upperMimgList'] = upperMimgList
+        upper['upperRegimgList'] = upperRegimgList
+        savefn = f'mean_img_reg_{sn}_upper'
+        np.save(f'{h5Dir}{mouse:03}/{savefn}', upper)
+    # Then lower volume
+    pn = 5
+    planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+    sessionNames = get_session_names(planeDir, mouse, pn)
+    nSessions = len(sessionNames)
+    lowerCorr = np.zeros((4,4,nSessions))
+    sessionFolderNames = [x.split('_')[1] if len(x.split('_')[1])==3 else x[4:] for x in sessionNames]
+    for i, sn in enumerate(sessionFolderNames):
+        print(f'Processing JK{mouse:03} lower volume, session {sn}.')
+        lowerMimgList, lowerRegimgList, lowerCorr[:,:,i] = same_session_planes_reg(mouse, sn, pn)
+        lower = {}
+        lower['lowerMimgList'] = lowerMimgList
+        lower['lowerRegimgList'] = lowerRegimgList
+        savefn = f'mean_img_reg_{sn}_lower'
+        np.save(f'{h5Dir}{mouse:03}/{savefn}', lower)
+    corrSaveFn = f'same_session_regCorrVals_JK{mouse:03}'
+    np.savez(f'{h5Dir}{mouse:03}/{corrSaveFn}', upperCorr = upperCorr, lowerCorr = lowerCorr)
 
 
+#%% Some within-correlation values are as low as <0.3
+# Check those numbers and see what happend on those sessions
+mi = 8
+mouse = mice[mi]
+corrs = np.load(f'{h5Dir}{mouse:03}/same_session_regCorrVals_JK{mouse:03}.npz')
+upper = corrs['upperCorr']
+lower = corrs['lowerCorr']
 
+f, ax = plt.subplots(2,4, figsize=(13,7), sharey=True)
+ylimlow = 0.2
+ytickstep = 0.2
+for i in range(4):
+    ax[0,i].plot(upper[i,i,:])
+    ax[0,i].set_ylim(ylimlow,1)
+    ax[0,i].set_yticks(np.arange(ylimlow,1,ytickstep))
+    ax[0,i].set_title(f'Plane {i+1}', fontsize=15)
+for i in range(4):
+    ax[1,i].plot(lower[i,i,:])
+    ax[1,i].set_ylim(ylimlow,1)
+    ax[1,i].set_yticks(np.arange(ylimlow,1,ytickstep))
+    ax[1,i].set_title(f'Plane {i+5}', fontsize=15)
+ax[0,0].set_ylabel('Pixelwise correlation', fontsize=15)
+ax[1,0].set_ylabel('Pixelwise correlation', fontsize=15)
+ax[1,0].set_xlabel('Sessions', fontsize=15)
+
+f.suptitle(f'JK{mouse:03}', fontsize=20)
+f.tight_layout()
+
+#%% Check session names
+pn = 1
+planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+sessionNames = get_session_names(planeDir, mouse, pn)
+nSessions = len(sessionNames)
+upperCorr = np.zeros((4,4,nSessions))
+sessionFolderNames = [x.split('_')[1] if len(x.split('_')[1])==3 else x[4:] for x in sessionNames]
+
+#%% Check images in the specified session
+pn = 1
+si = 16
+sn = sessionFolderNames[si]
+
+ops = np.load(f'{h5Dir}{mouse:03}/plane_{pn}/{sn}/plane0/ops.npy', allow_pickle=True).item()
+Ly, Lx, nframes = ops['Ly'], ops['Lx'], ops['nframes']
+binFn = f'{h5Dir}{mouse:03}/plane_{pn}/{sn}/plane0/data.bin'
+with BinaryFile(Ly = Ly, Lx = Lx, read_filename = binFn) as f:
+    inds1 = range(int(nframes/3))
+    frames = f.ix(indices=inds1).astype(np.float32)
+    mimg1 = frames.mean(axis=0)
+    rmin, rmax = np.percentile(mimg1,1), np.percentile(mimg1,99)
+    # mimg1 = np.clip(mimg1, rmin, rmax)
+    mimg1 = (np.clip(mimg1, rmin, rmax) - rmin) / (rmax-rmin)
+    
+    inds2 = range(int(nframes/3*2), nframes)
+    frames = f.ix(indices=inds2).astype(np.float32)
+    mimg2 = frames.mean(axis=0)
+    rmin, rmax = np.percentile(mimg2,1), np.percentile(mimg2,99)
+    # mimg2 = np.clip(mimg2, rmin, rmax)
+    mimg2 = (np.clip(mimg2, rmin, rmax) - rmin) / (rmax-rmin)
+    
+viewer = napari.Viewer()
+mixImg = np.zeros((Ly,Lx,3), dtype=np.float32)
+mixImg[:,:,0] = mimg1
+mixImg[:,:,2] = mimg1
+mixImg[:,:,1] = mimg2
+viewer.add_image(mixImg, rgb=True)
+viewer.add_image(np.stack([mimg1,mimg2],axis=0), name=f'JK{mouse:03} si {si} plane{pn}')
+
+'''
+There were some shadow appearing in some of the sessions in JK052.
+It can be either mouse-specific or because of using US gel (bubble inside due to heating?).
+Test in other mice in the same batch (JK053, 054, 056)
+(Do this on 12-core WS)
+'''
+
+
+#%% Visual inspection of across-plane registration
+# See how phase correlation worked for across-plane registration
+
+mi = 0
+mouse = mice[mi]
+viewer = napari.Viewer()
+pn = 1
+mouseDir = f'{h5Dir}{mouse:03}/'
+planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+sessionNames = get_session_names(planeDir, mouse, pn)
+nSessions = len(sessionNames)
+upperCorr = np.zeros((4,4,nSessions))
+sessionFolderNames = [x.split('_')[1] if len(x.split('_')[1])==3 else x[4:] for x in sessionNames]
+for sn in sessionFolderNames:
+    imgfn = f'mean_img_reg_{sn}_upper.npy'
+    imgs = np.load(f'{mouseDir}{imgfn}', allow_pickle=True).item()
+    viewer.add_image(np.array(imgs['upperRegimgList']), name=sn)
+    # viewer.add_image(np.array(imgs['upperMimgList']), name=sn)
+
+#%% Plot the result
+# Cut off 20 pixels form each edge
+
+transLim = 20
+mi = 0
+mouse = mice[mi]
+pn = 1
+mouseDir = f'{h5Dir}{mouse:03}/'
+corrFn = f'{mouseDir}same_session_regCorrVals_JK{mouse:03}'
+corrVal = np.load(corrFn)
+planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+sessionNames = get_session_names(planeDir, mouse, pn)
+    
