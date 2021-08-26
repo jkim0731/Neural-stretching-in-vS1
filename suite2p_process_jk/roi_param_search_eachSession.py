@@ -44,7 +44,8 @@ def roi_detection(ops, db):
     return numCell, numNotCell
 
 #%% Basic settings
-h5Dir = 'D:/TPM/JK/h5/'
+h5Dir = 'E:/'
+fastDir = 'C:/JK/' # This better be in SSD
 
 mice = [25,  27,  30,  36,  37,  38,  39,  41,  52,  53,  54,  56]
 zoom = [2,   2,   2,   1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7]
@@ -59,9 +60,20 @@ ops['save_NWB'] = False # for now. Need to set up parameters and confirm it work
 thFolderLen = 9 # to test done folders
 fnresults = ['F.npy', 'Fneu.npy', 'iscell.npy', 'spks.npy', 'stat.npy', 'data.bin', 'ops.npy'] # to test done folders
 
+ops = default_ops()
+ops['tau'] = 1.5
+ops['look_one_level_down'] = False
+ops['do_bidiphase'] = True
+ops['nimg_init'] = 100
+ops['batch_size'] = 5000
+ops['two_step_registration'] = True
+ops['keep_movie_raw'] = True
+ops['smooth_sigma_time'] = 2
+ops['move_bin'] = True
+
 #%%
 # for mi in [0,3,8]:
-for mi in [0,8]:    
+for mi in [8]:
     mouse = mice[mi]
     ops['fs'] = freq[mi]
     ops['zoom'] = zoom[mi]
@@ -70,7 +82,8 @@ for mi in [0,8]:
     for pn in range(1,9):
         mouseDir = f'{h5Dir}{mouse:03}/'
         planeDir = f'{mouseDir}plane_{pn}/'
-        
+        tempFnList = glob.glob(f'{planeDir}{mouse:03}_*_plane_{pn}.h5')
+
         # Make a list of session names and corresponding files
         tempFnList = glob.glob(f'{planeDir}{mouse:03}_*_plane_{pn}.h5')    
         fnames = [fn.split('\\')[1].split('.h5')[0] for fn in tempFnList]
@@ -90,24 +103,30 @@ for mi in [0,8]:
         regularSni = np.where(sessionNum < 1000)[0]
         
         sessionNames = []
+        sessionFiles = []
+        
         for sni in regularSni:
             sn = sessionNum[sni]
             sname = f'{mouse:03}_{sn:03}_'
             sessionNames.append(sname)
+            sessionFiles.append([fn for fn in tempFnList if sname in fn])
         if mouse < 50:
             for si in spontSi:
                 sessionNames.append(tempFnList[si].split('\\')[1].split('.h5')[0][:-8])
+                sessionFiles.append([tempFnList[si]])
         else:
             for stn in spontTrialNum:
                 sn = midNum[spontSi[0]]
                 sname = f'{mouse:03}_{sn}_{stn}'
                 sessionNames.append(sname)
+                sessionFiles.append([fn for fn in tempFnList if sname in fn])
         for ptn in piezoTrialNum:
             sn = midNum[piezoSi[0]]
             sname = f'{mouse:03}_{sn}_{ptn}'
             sessionNames.append(sname)
+            sessionFiles.append([fn for fn in tempFnList if sname in fn])
         
-        for sntemp in sessionNames:
+        for sntemp, sftemp in zip(sessionNames, sessionFiles):
             if len(sntemp.split('_')[2]) > 0:
                 sn1 = sntemp.split('_')[1]
                 sn2 = sntemp.split('_')[2]
@@ -121,7 +140,21 @@ for mi in [0,8]:
             ls = os.listdir(tempDir)
             tempThLen = sum([os.path.isdir(os.path.join(tempDir, lstr)) for lstr in ls])
             tempResultLen = len([b for b in fnresults if b in ls])
-            if not ((tempThLen == thFolderLen) & (tempResultLen == len(fnresults))): # this folder is not done yet                        
+            if not ((tempThLen == thFolderLen) & (tempResultLen == len(fnresults))): # this folder is not done yet
+                # Check for registration. If not, run registration
+                if not (os.path.isfile(f'{tempDir}ops.npy') & os.path.isfile(f'{tempDir}data.bin')):
+                    db = {'h5py': sftemp,
+                    'h5py_key': ['data'],
+                    'data_path': [],
+                    'save_path0': planeDir,
+                    'save_folder': f'{sn}',
+                    'fast_disk': f'{fastDir}',
+                    'roidetect': False,
+                    }
+                    run_s2p(ops,db)
+                    rawbinFn = f'{planeDir}{sn}/plane0/data_raw.bin'
+                    os.remove(rawbinFn)
+
                 # Detect ROI's - 1st round. 0.2 resolution
                 numroi = {} # dict, paired between threshold and numCell, numNotCell
                 thresholdList = [int(th*10)/10 for th in np.linspace(0,0.8,5)]
@@ -130,7 +163,7 @@ for mi in [0,8]:
                         'do_registration': 0, # Forcing to not run registration
                         'save_path0': planeDir,
                         'save_folder': f'{sn}',
-                        'rerun_jk': 1,
+                        'rerun_jk': 1, # Only for JK modification for suite2p v0.09
                         'allow_overlap': False,
                         'max_overlap': 0.3,
                         'threshold_scaling': threshold
@@ -149,7 +182,7 @@ for mi in [0,8]:
                         'do_registration': 0, # Forcing to not run registration
                         'save_path0': planeDir,
                         'save_folder': f'{sn}',
-                        'rerun_jk': 1,
+                        'rerun_jk': 1, # Only for JK modification for suite2p v0.09
                         'allow_overlap': False,
                         'max_overlap': 0.3,
                         'threshold_scaling': threshold
@@ -168,7 +201,7 @@ for mi in [0,8]:
                         'do_registration': 0, # Forcing to not run registration
                         'save_path0': planeDir,
                         'save_folder': f'{sn}',
-                        'rerun_jk': 1,
+                        'rerun_jk': 1, # Only for JK modification for suite2p v0.09
                         'allow_overlap': False,
                         'max_overlap': 0.3,
                         'threshold_scaling': threshold
