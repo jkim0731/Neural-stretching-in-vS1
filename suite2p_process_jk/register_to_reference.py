@@ -21,7 +21,7 @@ from suite2p.io.binary import BinaryFile
 import gc
 gc.enable()
 
-h5Dir = 'D:/TPM/JK/h5/'
+h5Dir = 'F:/'
 
 mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
 refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
@@ -52,7 +52,7 @@ def s2p_nonrigid_registration(mimgList, refImg, op):
 
     ### ------------- register binary to reference image ------------ ###
     
-    mean_img = np.zeros((Ly, Lx))
+    # mean_img = np.zeros((Ly, Lx))
     rigid_offsets, nonrigid_offsets = [], []
     frames = np.array(mimgList).astype(np.float32)
     fsmooth = frames.copy().astype(np.float32)
@@ -134,6 +134,26 @@ def get_session_names(baseDir, mouse, planeNum):
         sessionNames.append(sname)
     return sessionNames
 
+def phase_corr(a,b, transLim = 0):
+    if a.shape != b.shape:
+        raise('Dimensions must match')
+    R = np.fft.fft2(a) * np.fft.fft2(b).conj()
+    R /= np.absolute(R)
+    r = np.absolute(np.fft.ifft2(R))
+    if transLim > 0:
+        r = np.block([[r[-transLim:,-transLim:], r[-transLim:, :transLim+1]],
+                     [r[:transLim+1,-transLim:], r[:transLim+1, :transLim+1]]]
+            )
+        ymax, xmax = np.unravel_index(np.argmax(r), (transLim*2 + 1, transLim*2 + 1))
+        ymax, xmax = ymax - transLim, xmax - transLim
+        cmax = np.amax(r)
+        center = r[transLim, transLim]
+    else:
+        ymax, xmax = np.unravel_index(np.argmax(r), r.shape)
+        cmax = np.amax(r)
+        center = r[0, 0]
+    return ymax, xmax, cmax, center, r
+
 def same_session_planes_reg(mouse, sessionName, startPlane, edgeRem = 0.1, transLim = 20):
     mimgList = []
     regimgList = []
@@ -211,8 +231,8 @@ op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P reco
 op['maxregshift'] = 0.3
 op['smooth_sigma_time'] = 0
 
-# for mi in [0,3,8]:
-for mi in [0]:    
+for mi in [1,4]:
+# for mi in [0]:    
     mouse = mice[mi]
     refSession = refSessions[mi]
     
@@ -226,7 +246,7 @@ for mi in [0]:
     sessionFolderNames = [x.split('_')[1] if len(x.split('_')[1])==3 else x[4:] for x in sessionNames]
     for i, sn in enumerate(sessionFolderNames):
         print(f'Processing JK{mouse:03} upper volume, session {sn}.')
-        upperMimgList, upperRegimgList, upperCorr[:,:,i] = same_session_planes_reg(mouse, sn, pn)
+        upperMimgList, upperRegimgList, upperCorr[:,:,i] = same_session_planes_reg(mouse, sn, pn, edgeRem, transLim)
         upper = {}
         upper['upperMimgList'] = upperMimgList
         upper['upperRegimgList'] = upperRegimgList
@@ -241,7 +261,7 @@ for mi in [0]:
     sessionFolderNames = [x.split('_')[1] if len(x.split('_')[1])==3 else x[4:] for x in sessionNames]
     for i, sn in enumerate(sessionFolderNames):
         print(f'Processing JK{mouse:03} lower volume, session {sn}.')
-        lowerMimgList, lowerRegimgList, lowerCorr[:,:,i] = same_session_planes_reg(mouse, sn, pn)
+        lowerMimgList, lowerRegimgList, lowerCorr[:,:,i] = same_session_planes_reg(mouse, sn, pn, edgeRem, transLim)
         lower = {}
         lower['lowerMimgList'] = lowerMimgList
         lower['lowerRegimgList'] = lowerRegimgList
@@ -267,15 +287,16 @@ op['smooth_sigma_time'] = 0
 op['maxregshiftNR'] = 15
 op['snr_thresh'] = 1.2
 op['block_size'] = [128, 128]
-# for mi in [0,3,8]:
-for mi in [0]:    
+for mi in [1,4]:
+# for mi in [0]:    
     mouse = mice[mi]
     refSession = refSessions[mi]
     # for pn in range(1,9):
-    for pn in range(5,9):○
+    for pn in range(5,9):
         planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
         refDir = f'{planeDir}{refSession:03}/plane0/'
         ops = np.load(f'{refDir}ops.npy', allow_pickle=True).item()
+        Ly = ops['Ly']
         refImg = ops['meanImg'].astype(np.float32)
         # rmin, rmax = np.int16(np.percentile(refImg,1)), np.int16(np.percentile(refImg,99))
         rmin, rmax = np.percentile(refImg,1), np.percentile(refImg,99)
@@ -314,7 +335,7 @@ for mi in [0]:
 
 ## Calculate pixel correlation
         if mouse > 50:
-            tempFrame = frames[:,int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1-blankEdge]
+            tempFrame = frames[:,int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1-blankEdge] # Ly is always lower than Lx
             tempRefImg = refImg[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1-blankEdge]
         else:
             tempFrame = frames[:,int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1]
