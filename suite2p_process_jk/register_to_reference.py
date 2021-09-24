@@ -11,6 +11,20 @@ Use nonrigid registration with parameters confirmed from '210802_nonrigid_regist
 2021/08/25 JK
 """
 
+''' Updates
+Apply CLAHE before intensity correlation calculation, 
+to equalize intensity distribution and contrast across FOV, 
+because low-frequency bright gradient dominates correlation values.
+2021/08/26 JK
+
+Apply 2-step suite2p nonrigid registration.
+First pass: block size [128,128], maxregshiftNR 128//10 (12)
+Second pass: block size [32,32], maxregshiftNR 32//10 (3)
+
+Add mean squared difference (msd) as another way of quality quantification.
+2021/09/06 JK
+'''
+
 #%% Basic imports and settings
 import numpy as np
 from matplotlib import pyplot as plt
@@ -18,13 +32,21 @@ from suite2p.registration import rigid, nonrigid, utils
 import os, glob
 import napari
 from suite2p.io.binary import BinaryFile
+from skimage import exposure
 import gc
 gc.enable()
 
-h5Dir = 'F:/'
+h5Dir = 'D:/TPM/JK/h5/'
 
 mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
 refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
+
+# CLAHE each mean images
+def clahe_each(img: np.float64, kernel_size = None, clip_limit = 0.01, nbins = 2**16):
+    newimg = (img - np.amin(img)) / (np.amax(img) - np.amin(img))
+    newimg = exposure.equalize_adapthist(newimg, kernel_size = kernel_size, clip_limit = clip_limit, nbins=nbins)    
+    return newimg
+
 
 def s2p_nonrigid_registration(mimgList, refImg, op):
     ### ------------- compute registration masks ----------------- ###
@@ -85,7 +107,7 @@ def s2p_nonrigid_registration(mimgList, refImg, op):
         maxregshiftNR=op['maxregshiftNR'],
     )
 
-    frames = nonrigid.transform_data(
+    frames2 = nonrigid.transform_data(
         data=frames,
         nblocks=nblocks,
         xblock=xblock,
@@ -96,7 +118,7 @@ def s2p_nonrigid_registration(mimgList, refImg, op):
 
     nonrigid_offsets.append([ymax1, xmax1, cmax1])
     
-    return frames, rigid_offsets, nonrigid_offsets
+    return frames, frames2, rigid_offsets, nonrigid_offsets
 
 def get_session_names(baseDir, mouse, planeNum):
     tempFnList = glob.glob(f'{baseDir}{mouse:03}_*_plane_{planeNum}.h5')
@@ -118,7 +140,7 @@ def get_session_names(baseDir, mouse, planeNum):
     sessionNames = []
     for sni in regularSni:
         sn = sessionNum[sni]
-        sname = f'{mouse:03}_{sn:03}_'
+        sname = f'{mouse:03}_{sn:03}'
         sessionNames.append(sname)
     if mouse < 50:
         for si in spontSi:
@@ -134,10 +156,12 @@ def get_session_names(baseDir, mouse, planeNum):
         sessionNames.append(sname)
     return sessionNames
 
-def phase_corr(a,b, transLim = 0):
-    if a.shape != b.shape:
+def phase_corr(fixed, moving, transLim = 0):
+    # apply np.roll(moving, (ymax, xmax), axis=(0,1)) to match moving to fixed
+    # or, np.roll(fixed, (-ymax, -xmax), axis=(0,1))
+    if fixed.shape != moving.shape:
         raise('Dimensions must match')
-    R = np.fft.fft2(a) * np.fft.fft2(b).conj()
+    R = np.fft.fft2(fixed) * np.fft.fft2(moving).conj()
     R /= np.absolute(R)
     r = np.absolute(np.fft.ifft2(R))
     if transLim > 0:
@@ -157,7 +181,9 @@ def phase_corr(a,b, transLim = 0):
 def same_session_planes_reg(mouse, sessionName, startPlane, edgeRem = 0.1, transLim = 20):
     mimgList = []
     regimgList = []
-    corrVals = np.zeros((4,4))   
+    rawCorrVals = np.zeros((4,)) # for within-session brightness change
+    corrVals = np.zeros((4,4)) # correlations after CLAHE
+    msdVals = np.zeros((4,4)) # mean squared difference
     for i, pi in enumerate(range(startPlane,startPlane+4)):
         piDir = f'{h5Dir}{mouse:03}/plane_{pi}/{sessionName}/plane0/'
         piBinFn = f'{piDir}data.bin'
@@ -196,7 +222,12 @@ def same_session_planes_reg(mouse, sessionName, startPlane, edgeRem = 0.1, trans
                         mimg2 = mimg2[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1] # Ly is always shorter than Lx
                     rmin, rmax = np.percentile(mimg2,1), np.percentile(mimg2,99)
                     mimg2 = np.clip(mimg2, rmin, rmax)
-                    corrVals[i,i] = np.corrcoef(mimg1.flatten(), mimg2.flatten())[0,1]
+                    
+                    rawCorrVals[i] = np.corrcoef(mimg1.flatten(), mimg2.flatten())[0,1]
+                    val1 = clahe_each(mimg1).flatten()
+                    val2 = clahe_each(mimg2).flatten()
+                    corrVals[i,i] = np.corrcoef(val1, val2)[0,1]
+                    msdVals[i,i] = np.mean((val1-val2)**2)
             elif pj > pi: # different plane correlation, after rigid registration
                 pjDir = f'{h5Dir}{mouse:03}/plane_{pj}/{sn}/plane0/'
                 pjOpsFn = f'{pjDir}ops.npy'
@@ -211,12 +242,14 @@ def same_session_planes_reg(mouse, sessionName, startPlane, edgeRem = 0.1, trans
                     
                 # rigid registration
                 ymax, xmax,_,_,_ = phase_corr(piImg, pjImg, transLim)
-                pjImgReg = rigid.shift_frame(frame=pjImg, dy=ymax, dx=xmax)
+                pjImgReg = np.roll(pjImg, (ymax, xmax), axis=(0,1)) # 2021/09/06
                 # corrVals[i,j] = np.corrcoef(piImg.flatten(), pjImgReg.flatten())[0,1] # This is wrong. Need to clip transLim
-                corrVals[i,j] = np.corrcoef(piImg[transLim:-transLim, transLim:-transLim].flatten(), 
-                                            pjImgReg[transLim:-transLim, transLim:-transLim].flatten())[0,1] # 2021/08/13.
+                piVals = clahe_each(piImg[transLim:-transLim, transLim:-transLim]).flatten()
+                pjVals = clahe_each(pjImg[transLim:-transLim, transLim:-transLim]).flatten()
+                corrVals[i,j] = np.corrcoef(piVals, pjVals)[0,1] # 2021/08/13.
+                msdVals[i,j] = np.mean((piVals - pjVals)**2)
                 regimgList.append(pjImgReg)
-    return mimgList, regimgList, corrVals
+    return mimgList, regimgList, corrVals, msdVals, rawCorrVals
 
 #%%
 #%% Run within-session same-plane and between-plane registration 
@@ -231,8 +264,8 @@ op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P reco
 op['maxregshift'] = 0.3
 op['smooth_sigma_time'] = 0
 
-for mi in [1,4]:
-# for mi in [0]:    
+# for mi in [1,4]:
+for mi in [0,3,8]:    
     mouse = mice[mi]
     refSession = refSessions[mi]
     
@@ -243,10 +276,12 @@ for mi in [1,4]:
     sessionNames = get_session_names(planeDir, mouse, pn)
     nSessions = len(sessionNames)
     upperCorr = np.zeros((4,4,nSessions))
+    upperMsd = np.zeros((4,4,nSessions))
+    upperRawCorr = np.zeros((4,nSessions))
     sessionFolderNames = [x.split('_')[1] if len(x.split('_')[1])==3 else x[4:] for x in sessionNames]
     for i, sn in enumerate(sessionFolderNames):
         print(f'Processing JK{mouse:03} upper volume, session {sn}.')
-        upperMimgList, upperRegimgList, upperCorr[:,:,i] = same_session_planes_reg(mouse, sn, pn, edgeRem, transLim)
+        upperMimgList, upperRegimgList, upperCorr[:,:,i], upperMsd[:,:,i], upperRawCorr[:,i] = same_session_planes_reg(mouse, sn, pn, edgeRem, transLim)
         upper = {}
         upper['upperMimgList'] = upperMimgList
         upper['upperRegimgList'] = upperRegimgList
@@ -258,23 +293,33 @@ for mi in [1,4]:
     sessionNames = get_session_names(planeDir, mouse, pn)
     nSessions = len(sessionNames)
     lowerCorr = np.zeros((4,4,nSessions))
+    lowerMsd = np.zeros((4,4,nSessions))
+    lowerRawCorr = np.zeros((4,nSessions))
     sessionFolderNames = [x.split('_')[1] if len(x.split('_')[1])==3 else x[4:] for x in sessionNames]
     for i, sn in enumerate(sessionFolderNames):
         print(f'Processing JK{mouse:03} lower volume, session {sn}.')
-        lowerMimgList, lowerRegimgList, lowerCorr[:,:,i] = same_session_planes_reg(mouse, sn, pn, edgeRem, transLim)
+        lowerMimgList, lowerRegimgList, lowerCorr[:,:,i], lowerMsd[:,:,i], lowerRawCorr[:,i] = same_session_planes_reg(mouse, sn, pn, edgeRem, transLim)
         lower = {}
         lower['lowerMimgList'] = lowerMimgList
         lower['lowerRegimgList'] = lowerRegimgList
         savefn = f'mean_img_reg_{sn}_lower'
         np.save(f'{h5Dir}{mouse:03}/{savefn}', lower)
     corrSaveFn = f'same_session_regCorrVals_JK{mouse:03}'
-    np.savez(f'{h5Dir}{mouse:03}/{corrSaveFn}', upperCorr = upperCorr, lowerCorr = lowerCorr)
+    val = {}
+    val['upperCorr'] = upperCorr
+    val['upperMsd'] = upperMsd
+    val['upperRawCorr'] = upperRawCorr
+    val['lowerCorr'] = lowerCorr
+    val['lowerMsd'] = lowerMsd
+    val['lowerRawCorr'] = lowerRawCorr
+    np.save(f'{h5Dir}{mouse:03}/{corrSaveFn}', val)
 
 
 
 
 #%% Run nonrigid across sessions
-# with block size 128, maxregshiftNR 15
+# with block size 128, maxregshiftNR 12
+# and then with block size 32 and maxregshiftNR 3
 # Calculate pixel correlation between each mimg to ref mimg
 
 edgeRem = 0.2 # Proportion of image in each axis to remove before calculating correlations
@@ -286,17 +331,19 @@ op['maxregshift'] = 0.3
 op['smooth_sigma_time'] = 0
 op['maxregshiftNR'] = 15
 op['snr_thresh'] = 1.2
-op['block_size'] = [128, 128]
-for mi in [1,4]:
-# for mi in [0]:    
+# op['block_size'] = [128, 128]
+# for mi in [1,4]:
+for mi in [0,3,8]:
     mouse = mice[mi]
     refSession = refSessions[mi]
-    # for pn in range(1,9):
-    for pn in range(5,9):
+    for pn in range(1,9):
+    # for pn in range(5,9):
+        print(f'Processing JK{mouse:03} plane {pn}')
         planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
         refDir = f'{planeDir}{refSession:03}/plane0/'
         ops = np.load(f'{refDir}ops.npy', allow_pickle=True).item()
         Ly = ops['Ly']
+        Lx = ops['Lx']
         refImg = ops['meanImg'].astype(np.float32)
         # rmin, rmax = np.int16(np.percentile(refImg,1)), np.int16(np.percentile(refImg,99))
         rmin, rmax = np.percentile(refImg,1), np.percentile(refImg,99)
@@ -309,12 +356,13 @@ for mi in [1,4]:
 ## Load mean images from each session and make a list of them
         mimgList = []
         for sntemp in sessionNames:
-            if len(sntemp.split('_')[2]) > 0:
-                sn1 = sntemp.split('_')[1]
-                sn2 = sntemp.split('_')[2]
-                sn = f'{sn1}_{sn2}'
-            else:
-                sn = sntemp.split('_')[1]
+            # if len(sntemp.split('_')[2]) > 0:
+            #     sn1 = sntemp.split('_')[1]
+            #     sn2 = sntemp.split('_')[2]
+            #     sn = f'{sn1}_{sn2}'
+            # else:
+            #     sn = sntemp.split('_')[1]
+            sn = sntemp[4:]
             tempDir = os.path.join(planeDir, f'{sn}/plane0/')    
             ops = np.load(f'{tempDir}ops.npy', allow_pickle=True).item()
             tempImg = ops['meanImg']
@@ -329,9 +377,15 @@ for mi in [1,4]:
         if any(ydiff) or any(xdiff):
             raise(f'x or y length mismatch across sessions in JK{mouse:03} plane {pn}')
             
-## Perform suite2p nonrigid registration.
-
-        frames, rigid_offsets, nonrigid_offsets = s2p_nonrigid_registration(mimgList, refImg, op)
+## Perform suite2p nonrigid registration. 
+        # 1st pass
+        op['block_size'] = [128,128]
+        op['maxregshiftNR'] = 12
+        frames, rigid_offsets_1st, nonrigid_offsets_1st = s2p_nonrigid_registration(mimgList, refImg, op)
+        # 2nd pass
+        op['block_size'] = [32,32]
+        op['maxregshiftNR'] = 3
+        frames, rigid_offsets_2nd, nonrigid_offsets_2nd = s2p_nonrigid_registration(frames, refImg, op)
 
 ## Calculate pixel correlation
         if mouse > 50:
@@ -340,15 +394,25 @@ for mi in [1,4]:
         else:
             tempFrame = frames[:,int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1]
             tempRefImg = refImg[int(Ly*edgeRem):-int(Ly*edgeRem)-1, int(Ly*edgeRem):-int(Ly*edgeRem)-1]
-        corrVals = [np.corrcoef(tempRefImg.flatten(), tempImg.flatten())[0,1] 
+        corrVals = [np.corrcoef(clahe_each(tempRefImg).flatten(), clahe_each(tempImg).flatten())[0,1] 
                     for tempImg in tempFrame]
-            
+        msdVals = [np.mean((clahe_each(tempRefImg).flatten() - clahe_each(tempImg).flatten())**2)
+                    for tempImg in tempFrame]
+        
+                    
 ## Save the resulting mimg.
         op['sessionNames'] = sessionNames
         op['regImgs'] = frames
-        op['rigid_offsets'] = rigid_offsets
-        op['nonrigid_offsets'] = nonrigid_offsets
+        op['rigid_offsets_1st'] = rigid_offsets_1st
+        op['nonrigid_offsets_1st'] = nonrigid_offsets_1st
+        op['rigid_offsets_2nd'] = rigid_offsets_2nd
+        op['nonrigid_offsets_2nd'] = nonrigid_offsets_2nd
         op['corrVals'] = corrVals
+        op['msdVals'] = msdVals
+        op['block_size1'] = [128,128]
+        op['maxregshiftNR1'] = 12
+        op['block_size2'] = [32,32]
+        op['maxregshiftNR2'] = 3
         
         saveFn = f'{planeDir}s2p_nr_reg'
         np.save(saveFn, op)
@@ -358,16 +422,300 @@ for mi in [1,4]:
 
 
 
+#%% Testing if the registration offsets are correct
+# And also how to apply them
+# 2021/09/08
+mi = 0
+mouse = mice[mi]
+pn = 1
+planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+regOps = np.load(f'{planeDir}s2p_nr_reg.npy', allow_pickle=True).item()
+if 'block_size1' not in regOps:
+    regOps['block_size1'] = [128,128]
+    regOps['block_size2'] = [32,32]
+    regOps['maxregshiftNR1'] = 12
+    regOps['maxregshiftNR2'] = 3
+    
+si = 5
+tempSn = regOps['sessionNames'][si]
+# tempSn = tempSn[4:-1] if tempSn[-1]=='_' else tempSn[4:]
+tempDir = f'{planeDir}{tempSn}/plane0/'
+ops = np.load(f'{tempDir}ops.npy', allow_pickle=True).item()
+tempImg = ops['meanImg'].astype(np.float32)
+regImg = regOps['regImgs'][si,:,:]
+
+(Ly, Lx) = regOps['regImgs'].shape[1:]
+rigid_y1 = regOps['rigid_offsets_1st'][0][0][si]
+rigid_x1 = regOps['rigid_offsets_1st'][0][1][si]
+nonrigid_y1 = regOps['nonrigid_offsets_1st'][0][0][si,:]
+nonrigid_x1 = regOps['nonrigid_offsets_1st'][0][1][si,:]
+rigid_y2 = regOps['rigid_offsets_2nd'][0][0][si]
+rigid_x2 = regOps['rigid_offsets_2nd'][0][1][si]
+nonrigid_y2 = regOps['nonrigid_offsets_2nd'][0][0][si,:]
+nonrigid_x2 = regOps['nonrigid_offsets_2nd'][0][1][si,:]
+
+frames = np.expand_dims(tempImg, axis=0)
+# Apply 2-step registration
+# 1st rigid shift
+frames = rigid.shift_frame(frame=frames, dy=rigid_y1, dx=rigid_x1)
+# 1st nonrigid shift
+yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=regOps['block_size1'])
+ymax1 = np.tile(nonrigid_y1, (frames.shape[0],1))
+xmax1 = np.tile(nonrigid_x1, (frames.shape[0],1))
+frames = nonrigid.transform_data(
+    data=frames,
+    nblocks=nblocks,
+    xblock=xblock,
+    yblock=yblock,
+    ymax1=ymax1,
+    xmax1=xmax1,
+)
+# 2nd rigid shift
+frames = rigid.shift_frame(frame=frames, dy=rigid_y2, dx=rigid_x2)
+# 2nd nonrigid shift
+yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=regOps['block_size2'])
+ymax1 = np.tile(nonrigid_y2, (frames.shape[0],1))
+xmax1 = np.tile(nonrigid_x2, (frames.shape[0],1))
+frames = nonrigid.transform_data(
+    data=frames,
+    nblocks=nblocks,
+    xblock=xblock,
+    yblock=yblock,
+    ymax1=ymax1,
+    xmax1=xmax1,
+)
+
+# show the result
+testImg = frames.squeeze()
+napari.view_image(np.array([regImg, testImg]))
+#%%
+napari.view_image(np.array([ops['meanImg'],tempImg]))
+
+'''
+It does not match. How come?
+'''
+#%%
+op = {}
+op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P recordings
+op['maxregshift'] = 0.3
+op['smooth_sigma_time'] = 0
+op['maxregshiftNR'] = 15
+op['snr_thresh'] = 1.2
+
+refSession = refSessions[mi]
+refDir = f'{planeDir}{refSession:03}/plane0/'
+ops = np.load(f'{refDir}ops.npy', allow_pickle=True).item()
+refImg = ops['meanImg'].astype(np.float32)
+
+frames = np.expand_dims(tempImg, axis=0)
+
+
+op['block_size'] = [128,128]
+op['maxregshiftNR'] = 12
+_, frames, rigid_offsets_1st, nonrigid_offsets_1st = s2p_nonrigid_registration(frames, refImg, op)
+# 2nd pass
+op['block_size'] = [32,32]
+op['maxregshiftNR'] = 3
+_, frames, rigid_offsets_2nd, nonrigid_offsets_2nd = s2p_nonrigid_registration(frames, refImg, op)
+
+testImg = frames.squeeze()
+# napari.view_image(np.array([regImg, testImg]))
+
+
+#%%
+op = {}
+op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P recordings
+op['maxregshift'] = 0.3
+op['smooth_sigma_time'] = 0
+op['maxregshiftNR'] = 15
+op['snr_thresh'] = 1.2
+
+refSession = refSessions[mi]
+refDir = f'{planeDir}{refSession:03}/plane0/'
+ops = np.load(f'{refDir}ops.npy', allow_pickle=True).item()
+refImg = ops['meanImg'].astype(np.float32)
+
+si = 5
+tempSn = regOps['sessionNames'][si][4:]
+tempDir = f'{planeDir}{tempSn}/plane0/'
+ops = np.load(f'{tempDir}ops.npy', allow_pickle=True).item()
+tempImg = ops['meanImg'].astype(np.float32)
+regImg = regOps['regImgs'][si,:,:]
+
+frames = np.expand_dims(tempImg, axis=0)
+
+
+op['block_size'] = [128,128]
+op['maxregshiftNR'] = 12
+frames1, frames2, rigid_offsets_1st, nonrigid_offsets_1st = s2p_nonrigid_registration(frames, refImg, op)
+# 2nd pass
+op['block_size'] = [32,32]
+op['maxregshiftNR'] = 3
+frames3, frames4, rigid_offsets_2nd, nonrigid_offsets_2nd = s2p_nonrigid_registration(frames2, refImg, op)
+
+ttestImg = frames4.squeeze()
+
+
+
+rigid_y1 = rigid_offsets_1st[0][0]
+rigid_x1 = rigid_offsets_1st[0][1]
+nonrigid_y1 = nonrigid_offsets_1st[0][0]
+nonrigid_x1 = nonrigid_offsets_1st[0][1]
+rigid_y2 = rigid_offsets_2nd[0][0]
+rigid_x2 = rigid_offsets_2nd[0][1]
+nonrigid_y2 = nonrigid_offsets_2nd[0][0]
+nonrigid_x2 = nonrigid_offsets_2nd[0][1]
+
+
+
+testFrames = np.expand_dims(tempImg, axis=0)
+# Apply 2-step registration
+# 1st rigid shift
+testFrames1 = testFrames.copy()
+for (fr, dy, dx) in zip(testFrames1, rigid_y1, rigid_x1):
+    fr[:] = rigid.shift_frame(frame=fr, dy=dy, dx=dx)
+
+# 1st nonrigid shift
+yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size1']))
+ymax1 = np.tile(nonrigid_y1, (testFrames1.shape[0],1))
+xmax1 = np.tile(nonrigid_x1, (testFrames1.shape[0],1))
+testFrames2 = nonrigid.transform_data(
+    data=testFrames1,
+    nblocks=nblocks,
+    xblock=xblock,
+    yblock=yblock,
+    ymax1=ymax1,
+    xmax1=xmax1,
+)
+# 2nd rigid shift
+testFrames3 = testFrames2.copy()
+for (fr, dy, dx) in zip(testFrames3, rigid_y2, rigid_x2):
+    fr[:] = rigid.shift_frame(frame=fr, dy=dy, dx=dx)
+# 2nd nonrigid shift
+yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size2']))
+ymax1 = np.tile(nonrigid_y2, (frames3.shape[0],1))
+xmax1 = np.tile(nonrigid_x2, (frames3.shape[0],1))
+testFrames4 = nonrigid.transform_data(
+    data=testFrames3,
+    nblocks=nblocks,
+    xblock=xblock,
+    yblock=yblock,
+    ymax1=ymax1,
+    xmax1=xmax1,
+)
+
+testRegImg = testFrames4.squeeze()
 
 
 
 
 
+# 1st rigid shift
+ttestFrames1 = tempImg.copy()
+ttestFrames1 = rigid.shift_frame(frame=ttestFrames1, dy = rigid_y1[0], dx = rigid_x1[0])
+# 1st nonrigid shift
+yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size1']))
+ymax1 = np.tile(nonrigid_y1, (testFrames1.shape[0],1))
+xmax1 = np.tile(nonrigid_x1, (testFrames1.shape[0],1))
+ttestFrames2 = nonrigid.transform_data(
+    data=np.expand_dims(ttestFrames1, axis=0),
+    nblocks=nblocks,
+    xblock=xblock,
+    yblock=yblock,
+    ymax1=ymax1,
+    xmax1=xmax1,
+)
+# 2nd rigid shift
+ttestFrames3 = ttestFrames2[0,:,:].copy()
+ttestFrames3 = rigid.shift_frame(frame=ttestFrames3, dy = rigid_y2[0], dx = rigid_x2[0])
+# 2nd nonrigid shift
+yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size2']))
+ymax1 = np.tile(nonrigid_y2, (frames3.shape[0],1))
+xmax1 = np.tile(nonrigid_x2, (frames3.shape[0],1))
+ttestFrames4 = nonrigid.transform_data(
+    data=np.expand_dims(ttestFrames3, axis=0),
+    nblocks=nblocks,
+    xblock=xblock,
+    yblock=yblock,
+    ymax1=ymax1,
+    xmax1=xmax1,
+)
+
+ttestRegImg = ttestFrames4.squeeze()
+
+
+napari.view_image(np.array([regImg, testImg, ttestImg, testRegImg, ttestRegImg]))
 
 
 
 
 
+#%%
+# 1st rigid shift
+ff = tempImg.copy()
+ff = rigid.shift_frame(frame=ff, dy = rigid_y1[0], dx = rigid_x1[0])
+ff = np.expand_dims(ff, axis=0)
+# 1st nonrigid shift
+yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size1']))
+ymax1 = np.tile(nonrigid_y1, (ff.shape[0],1))
+xmax1 = np.tile(nonrigid_x1, (ff.shape[0],1))
+ff = nonrigid.transform_data(
+    data=ff,
+    nblocks=nblocks,
+    xblock=xblock,
+    yblock=yblock,
+    ymax1=ymax1,
+    xmax1=xmax1,
+)
+
+# 2nd rigid shift
+ff = ff.squeeze()
+ff = rigid.shift_frame(frame=ff, dy = rigid_y2[0], dx = rigid_x2[0])
+ff = np.expand_dims(ff,axis=0)
+# 2nd nonrigid shift
+yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=regOps['block_size2'])
+ymax1 = np.tile(nonrigid_y2, (ff.shape[0],1))
+xmax1 = np.tile(nonrigid_x2, (ff.shape[0],1))
+ff = nonrigid.transform_data(
+    data=ff,
+    nblocks=nblocks,
+    xblock=xblock,
+    yblock=yblock,
+    ymax1=ymax1,
+    xmax1=xmax1,
+)
+
+ff = ff.squeeze()
+
+
+
+napari.view_image(np.array([regImg, testImg, testRegImg, ttestRegImg, ff, tempImg]))
+
+#%% show the result
+viewer = napari.Viewer()
+viewer.add_image(np.vstack((frames1, testFrames1)), name='1st rigid')
+viewer.add_image(np.vstack((frames2, testFrames2)), name='1st nonrigid')
+viewer.add_image(np.vstack((frames3, testFrames3)), name='2nd rigid')
+viewer.add_image(np.vstack((frames4, testFrames4)), name='2nd nonrigid')
+
+
+#%%
+testFrames1 = testFrames.copy()
+testFrames11 = testFrames.copy()
+for (fr, dy, dx) in zip(testFrames1, rigid_y1, rigid_x1):
+    fr[:] = rigid.shift_frame(frame=fr, dy=dy, dx=dx)
+testFrames11 = rigid.shift_frame(frame=testFrames11[0,:,:], dy = rigid_y1[0], dx = rigid_x1[0])
+testFrames11 = np.expand_dims(testFrames11, axis=0)
+if dy == rigid_y1[0]:
+    print('Same dy')
+else:
+    print('Different dy')
+if dx == rigid_x1[0]:
+    print('Same dx')
+else:
+    print('Different dy')
+    
+a = testFrames11-testFrames1
 #%% For visual insepction of same-session reg
 #%% Some within-correlation values are as low as <0.3
 # Check those numbers and see what happend on those sessions
@@ -435,7 +783,6 @@ for mi in [1,4]:
 # mixImg[:,:,1] = mimg2
 # viewer.add_image(mixImg, rgb=True)
 # viewer.add_image(np.stack([mimg1,mimg2],axis=0), name=f'JK{mouse:03} si {si} plane{pn}')
-
 
 
 

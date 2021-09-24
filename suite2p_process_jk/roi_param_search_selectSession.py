@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-Run suite2p from each session. (Copied from 210608_s2p_selected_sessions.py)
+Run suite2p from each selected session. (Copied from roi_param_search_eachSession.py)
 Automatically detect the best threshold parameter for ROI selection.
 
 Use already registered data.bin (results from register_all_sessions.py)
@@ -8,8 +9,32 @@ Try 0.2 interval first (0:1:0.2), and then around the peak value x, try x-0.1:x+
 Then, around the peak value y, try y-0.05:y+0.05:0.05.
 With 9 iterations, get 0.05 resolution of threshold
 
-2021/07/24 JK
+2021/09/24 JK
 """
+removingSessions = {'025Upper': ['014', '016', '017','018','024','025','5555_001','5555_004','5555_014','5555_103','9999_1', '9999_2'],
+                    '025Lower': ['011', '012', '016','025','5554_001','5554_003','5554_012','5554_013','5554_103','9998_1', '9998_2'],
+                    '027Upper': [],
+                    '027Lower': [],
+                    '030Upper': [],
+                    '030Lower': [],
+                    '036Upper': [],
+                    '036Lower': [],
+                    '037Upper': [],
+                    '037Lower': [],
+                    '038Upper': [],
+                    '038Lower': [],
+                    '039Upper': [],
+                    '039Lower': [],
+                    '041Upper': [],
+                    '041Lower': [],
+                    '052Upper': [],
+                    '052Lower': [],
+                    '053Upper': [],
+                    '053Lower': [],
+                    '054Upper': [],
+                    '054Lower': [],
+                    '056Upper': [],
+                    '056Lower': [],}
 
 import numpy as np
 from suite2p.run_s2p import run_s2p, default_ops
@@ -129,6 +154,7 @@ for mi in [8]:
             sessionNames.append(sname)
             sessionFiles.append([fn for fn in tempFnList if sname in fn])
         
+        volumeName = f'{mouse:03}Upper' if pn < 5 else f'{mouse:03}Upper'
         for sntemp, sftemp in zip(sessionNames, sessionFiles):
             if len(sntemp.split('_')[2]) > 0:
                 sn1 = sntemp.split('_')[1]
@@ -136,46 +162,47 @@ for mi in [8]:
                 sn = f'{sn1}_{sn2}'
             else:
                 sn = sntemp.split('_')[1]
-                
-            # Check if ROI param search was done in this folder
-            # (# of thxxx folder == 9) & (isfile, F.npy, Fnew.npy, iscell.npy, spks.npy, stat.npy)
-            tempDir = os.path.join(planeDir, f'{sn}/plane0/')
-            ls = os.listdir(tempDir)
-            tempThLen = sum([os.path.isdir(os.path.join(tempDir, lstr)) for lstr in ls])
-            tempResultLen = len([b for b in fnresults if b in ls])
-            if not ((tempThLen == thFolderLen) & (tempResultLen == len(fnresults))): # this folder is not done yet
-                # Check for registration. If not, run registration
-                if not (os.path.isfile(f'{tempDir}ops.npy') & os.path.isfile(f'{tempDir}data.bin')):
-                    db = {'h5py': sftemp,
-                    'h5py_key': ['data'],
-                    'data_path': [],
-                    'save_path0': planeDir,
-                    'save_folder': f'{sn}',
-                    'fast_disk': f'{fastDir}',
-                    'roidetect': False,
-                    }
-                    run_s2p(ops,db)
-                    rawbinFn = f'{planeDir}{sn}/plane0/data_raw.bin'
-                    os.remove(rawbinFn)
-
-                # Detect ROI's - 1st round. 0.2 resolution
-                numroi = {} # dict, paired between threshold and numCell, numNotCell
-                thresholdList = [int(th*10)/10 for th in np.linspace(0,0.8,5)]
-                for threshold in thresholdList:
-                    db = {'data_path': [],
-                        'do_registration': 0, # Forcing to not run registration
+            
+            if sn not in removingSessions[volumeName]:
+                # Check if ROI param search was done in this folder
+                # (# of thxxx folder == 9) & (isfile, F.npy, Fnew.npy, iscell.npy, spks.npy, stat.npy)
+                tempDir = os.path.join(planeDir, f'{sn}/plane0/')
+                ls = os.listdir(tempDir)
+                tempThLen = sum([os.path.isdir(os.path.join(tempDir, lstr)) for lstr in ls])
+                tempResultLen = len([b for b in fnresults if b in ls])
+                if not ((tempThLen == thFolderLen) & (tempResultLen == len(fnresults))): # this folder is not done yet
+                    # Check for registration. If not, run registration
+                    if not (os.path.isfile(f'{tempDir}ops.npy') & os.path.isfile(f'{tempDir}data.bin')):
+                        db = {'h5py': sftemp,
+                        'h5py_key': ['data'],
+                        'data_path': [],
                         'save_path0': planeDir,
                         'save_folder': f'{sn}',
-                        'rerun_jk': 1, # Only for JK modification for suite2p v0.09
-                        'threshold_scaling': threshold
-                    }
-                    numCell, numNotCell = roi_detection(ops, db)
-                    numroi[threshold] = [numCell, numNotCell] 
-                
-                # Pick the best, and then run the 2nd round. 0.1 resolution
-                numroiArray = np.array(list(numroi.values()))[:,0]
-                maxind = np.argmax(numroiArray)
-                maxthreshold = int(list(numroi.keys())[maxind]*10)/10
+                        'fast_disk': f'{fastDir}',
+                        'roidetect': False,
+                        }
+                        run_s2p(ops,db)
+                        rawbinFn = f'{planeDir}{sn}/plane0/data_raw.bin'
+                        os.remove(rawbinFn)
+    
+                    # Detect ROI's - 1st round. 0.2 resolution
+                    numroi = {} # dict, paired between threshold and numCell, numNotCell
+                    thresholdList = [int(th*10)/10 for th in np.linspace(0,0.8,5)]
+                    for threshold in thresholdList:
+                        db = {'data_path': [],
+                            'do_registration': 0, # Forcing to not run registration
+                            'save_path0': planeDir,
+                            'save_folder': f'{sn}',
+                            'rerun_jk': 1, # Only for JK modification for suite2p v0.09
+                            'threshold_scaling': threshold
+                        }
+                        numCell, numNotCell = roi_detection(ops, db)
+                        numroi[threshold] = [numCell, numNotCell] 
+                    
+                    # Pick the best, and then run the 2nd round. 0.1 resolution
+                    numroiArray = np.array(list(numroi.values()))[:,0]
+                    maxind = np.argmax(numroiArray)
+                    maxthreshold = int(list(numroi.keys())[maxind]*10)/10
                 
                 thresholdList = [maxthreshold-0.1, maxthreshold+0.1]
                 for threshold in thresholdList:
