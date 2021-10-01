@@ -61,7 +61,7 @@ def get_session_names(baseDir, mouse, planeNum):
 
 #%% Plot correlation values
 # For each mouse, and each volume, import reg results
-mi = 0
+mi = 3
 pnTop = 5 # either 1 or 5
 volume = 'upper' if pnTop < 5 else 'lower'
 mouse = mice[mi]
@@ -153,3 +153,46 @@ for pn in range(pnTop, pnTop+4):
         sname = sessionNames[si]
         viewer.add_image(mat, rgb=True, name=f'{si}: {sname} p{pn}', visible=False)
 
+#%% Final confirmation with selected sessions
+removingSessions = {'025Upper': ['014', '016', '017','018','024','025','5555_001','5555_004','5555_014','5555_103','9999_1', '9999_2'],
+                    '025Lower': ['011', '012', '016','025','5554_001','5554_003','5554_012','5554_013','5554_103','9998_1', '9998_2'],
+                    '027Upper': [],
+                    '027Lower': [],
+                    '030Upper': [],
+                    '030Lower': [],
+                    '036Upper': ['004', '013', '014', '019', '020', '021', '5555_001', '5555_111', '5555_101', '5555_110',  '9999_1', '9999_2'],
+                    '036Lower': ['002', '008', '011', '013', '019', '020', '021', '901', '5554_001', '5554_011', '9998_1', '9998_2' ],
+                    '037Upper': [],
+                    '037Lower': [],
+                    '038Upper': [],
+                    '038Lower': [],
+                    '039Upper': [],
+                    '039Lower': [],
+                    '041Upper': [],
+                    '041Lower': [],
+                    '052Upper': [],
+                    '052Lower': [],
+                    '053Upper': [],
+                    '053Lower': [],
+                    '054Upper': [],
+                    '054Lower': [],
+                    '056Upper': [],
+                    '056Lower': [],}
+
+volumeName = f'{mouse:03}Upper' if pnTop < 5 else f'{mouse:03}Lower'
+viewer = napari.Viewer()
+matchedSname = []
+for pn in range(pnTop, pnTop+4):
+    # New napari viewer for each plane
+    planeDir = f'{mouseDir}plane_{pn}/'
+    reg = np.load(f'{planeDir}s2p_nr_reg.npy', allow_pickle=True).item()
+    mat = []
+    for si in range(numSession):
+        sname = sessionNames[si][4:]
+        if sname not in removingSessions[volumeName]:
+            tempImg = reg['regImgs'][si,:,:]
+            tempImg = tempImg/np.amax(tempImg)    
+            mat.append(tempImg)
+            if pn == pnTop:
+                matchedSname.append(sname)
+    viewer.add_image(np.array(mat), name=f'plane {pn}', visible=False)

@@ -14,6 +14,9 @@ Added removing blood vessel ROIs and edge ROIs
 Return # cell and # not-cell
 2021/06/09 JK
 
+Removed removing blood vessel ROIs
+2021/09/30 JK
+
 '''
 import numpy as np
 import os
@@ -31,17 +34,17 @@ def auto_pre_cur(dataFolder, minRadiusThreUm = 4, maxRadiusThreUm = 20, arThre =
     # by selecting the ROIs that have higher average neuropil signal compared to "soma" fluorescence
     # throughout the whole imaging sessions
     
-    frameSelect = []
-    for i in range(0,len(ops['nframes_per_folder'])):
-        tempRange = [*range(sum(ops['nframes_per_folder'][0:i]), sum(ops['nframes_per_folder'][0:i+1]))]
-        frameSelect.append(tempRange)
+    # frameSelect = []
+    # for i in range(0,len(ops['nframes_per_folder'])):
+    #     tempRange = [*range(sum(ops['nframes_per_folder'][0:i]), sum(ops['nframes_per_folder'][0:i+1]))]
+    #     frameSelect.append(tempRange)
     
-    a = fneu - f
-    b = np.zeros((np.shape(a)[0],len(frameSelect)))
-    for i in range(len(frameSelect)):
-        b[:,i] = a[:,frameSelect[i]].mean(axis=1) >= 0
-    c = b.sum(axis=1)
-    vesselList = list(*np.where(c==len(frameSelect)))
+    # a = fneu - f
+    # b = np.zeros((np.shape(a)[0],len(frameSelect)))
+    # for i in range(len(frameSelect)):
+    #     b[:,i] = a[:,frameSelect[i]].mean(axis=1) >= 0
+    # c = b.sum(axis=1)
+    # vesselList = list(*np.where(c==len(frameSelect)))
 
     # Make a list of all ROIs that "touches" the edge of the image
     xmin = ops['xrange'][0]
@@ -70,18 +73,18 @@ def auto_pre_cur(dataFolder, minRadiusThreUm = 4, maxRadiusThreUm = 20, arThre =
         
     # Curate ROIs
     for i in range(0,len(stat)):        
-        if (i in edgeList) or (i in vesselList):
+        # if (i in edgeList) or (i in vesselList):
+        #     iscell[i][0] = 0
+        # else:
+        if stat[i]['npix'] <= minNpixThre:
             iscell[i][0] = 0
-        else:
-            if stat[i]['npix'] <= minNpixThre:
-                iscell[i][0] = 0
-            if stat[i]['npix'] > minNpixThre:
-                if (stat[i]['aspect_ratio'] < arThre) & (stat[i]['compact'] < crThre):
-                    iscell[i][0] = 1
-                else:
-                    iscell[i][0] = 0    
-            if stat[i]['npix'] > maxNpixThre:
-                iscell[i][0] = 0
+        if stat[i]['npix'] > minNpixThre:
+            if (stat[i]['aspect_ratio'] < arThre) & (stat[i]['compact'] < crThre):
+                iscell[i][0] = 1
+            else:
+                iscell[i][0] = 0    
+        if stat[i]['npix'] > maxNpixThre:
+            iscell[i][0] = 0
     
     # Save to "iscell.npy"
     np.save(f'{dataFolder}iscell.npy', iscell)

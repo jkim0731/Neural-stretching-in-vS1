@@ -118,7 +118,7 @@ def s2p_nonrigid_registration(mimgList, refImg, op):
 
     nonrigid_offsets.append([ymax1, xmax1, cmax1])
     
-    return frames, frames2, rigid_offsets, nonrigid_offsets
+    return frames2, rigid_offsets, nonrigid_offsets
 
 def get_session_names(baseDir, mouse, planeNum):
     tempFnList = glob.glob(f'{baseDir}{mouse:03}_*_plane_{planeNum}.h5')
