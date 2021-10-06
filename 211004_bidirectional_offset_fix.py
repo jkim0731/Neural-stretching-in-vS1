@@ -67,9 +67,10 @@ def get_session_names(planeDir, mouse, planeNum):
 # In each mouse
 mi = 0
 mouse = mice[mi]
-#%% mean images
+# mean images
 # viewer = napari.Viewer()
-bdpList = []
+bdpList = {}
+errorSessionInds = {}
 for pn in range(1,9):
     planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
     sessionNames = get_session_names(planeDir, mouse, pn)
@@ -80,10 +81,59 @@ for pn in range(1,9):
         ops = np.load(f'{planeDir}{sname}/plane0/ops.npy', allow_pickle=True).item()
         # mimgList.append(ops['meanImg'])
         bdpPlane.append(ops['bidiphase'])
-    bdpList.append(np.array(bdpPlane))
+    bdpList[pn] = np.array(bdpPlane)
+    errorSessionInds[pn] = np.where(np.array(bdpPlane))[0]
     # viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
+#%%
+# ops = default_ops()
+# ops['tau'] = 1.5
+# ops['look_one_level_down'] = False
+# ops['do_bidiphase'] = True
+# ops['nimg_init'] = 300
+# ops['batch_size'] = 3000
+# ops['two_step_registration'] = True
+# ops['keep_movie_raw'] = True
+# ops['smooth_sigma_time'] = 2
+# ops['move_bin'] = True
+# for pn in range(1,9):
+#     planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
+#     sessionNames = get_session_names(planeDir, mouse, pn)
+#     h5List = glob.glob(f'{planeDir}{mouse:03}_*_plane_{pn}.h5')  
+#     for ei in errorSessionInds[pn]:
+#         snameFull = sessionNames[ei]
+#         sname = snameFull[4:]
+#         tempFnList = [fn for fn in h5List if snameFull in fn]
+        
+#         print(f'Processing JK{mouse:03} plane {pn} session {sname}')
+        
+#         sessionDir = f'{planeDir}{sname}/plane0/'
+#         db = {'h5py': tempFnList,
+#             'h5py_key': ['data'],
+#             'data_path': [],
+#             'save_path0': planeDir,
+#             'save_folder': sname,
+#             'fast_disk': fastDir,
+#             'roidetect': False,
+#         }
+#         run_s2p(ops,db)
+#         rawbinFn = f'{planeDir}{sname}/plane0/data_raw.bin'
+#         os.remove(rawbinFn)
+# #%%
+# '''
+# It was due to suite2p error.
+# Bidirectional shift was also applied to the 2nd round of 2-step registration.
+# I fixed this on 2021/10/05. 
+# So, whenever there was a bidishift, it resulted in error.
+# Just check the one with nonzero bidishift and run that session again.
+# Check visually after it's done.
+# '''
+#%%
 
 
+
+
+
+#%%
 #%% In each horrible session, re-run registration with nimg_init that detects
 # bidirectional offset.
 # Increase by 25 from 100 until 500, until bidirecitonal offset is not 0
@@ -100,7 +150,7 @@ for pn in range(1,9):
 #                     8: [1,16,25]}
 errorSessionInds = {1: [],
                     2: [],
-                    3: [7,20,23],
+                    3: [23],
                     4: [1,7],
                     5: [1,10,13,25,28,30],
                     6: [1,2,5,13,22,25,26,28,30],
@@ -109,17 +159,19 @@ errorSessionInds = {1: [],
 
 
 
-#%% check ref images
-viewer = napari.Viewer()
-for pn in range(1,9):
-    planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
-    sessionNames = get_session_names(planeDir, mouse, pn)
-    mimgList = []
-    for ei in errorSessionInds[pn]:
-        sname = sessionNames[ei][4:]
-        ops = np.load(f'{planeDir}{sname}/plane0/ops.npy', allow_pickle=True).item()
-        mimgList.append(ops['refImg'])
-    viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
+# #%% check ref images
+# viewer = napari.Viewer()
+# for pn in range(1,9):
+#     planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
+#     sessionNames = get_session_names(planeDir, mouse, pn)
+#     mimgList = []
+#     for ei in errorSessionInds[pn]:
+#         sname = sessionNames[ei][4:]
+#         ops = np.load(f'{planeDir}{sname}/plane0/ops.npy', allow_pickle=True).item()
+#         mimgList.append(ops['refImg'])
+#     viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
+
+
 
 
 #%%
@@ -173,12 +225,12 @@ for pn in range(1,9):
                         dataCurr += len(useInd)
                         nframeCurr += nframe
                 bdphase = bidiphase.compute(data)
-                if bdphase != prevOps['bidiphase']:
+                if bdphase != 0: # works for both opsPrev['bidiphase']==0 and != 0
                     foundflag = 1
                     print(f'Found a new bidirectional offset {bdphase} at {nimginit}')
                     ops['nimg_init'] = nimginit
                     break
-        
+            
         if foundflag:
             # Before running a new suite2p, back up everything
             pathlist = os.listdir(f'{planeDir}{sname}/plane0/')
@@ -207,36 +259,36 @@ for pn in range(1,9):
         
 
 
-#%% Check again if the issue is fixed
-viewer = napari.Viewer()
-for pn in range(1,9):
-    planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
-    sessionNames = get_session_names(planeDir, mouse, pn)
-    mimgList = []
-    for ei in errorSessionInds[pn]:
-        sname = sessionNames[ei][4:]
-        ops = np.load(f'{planeDir}{sname}/plane0/ops.npy', allow_pickle=True).item()
-        mimgList.append(ops['meanImg'])
-    viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
+# #%% Check again if the issue is fixed
+# viewer = napari.Viewer()
+# for pn in range(1,9):
+#     planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
+#     sessionNames = get_session_names(planeDir, mouse, pn)
+#     mimgList = []
+#     for ei in errorSessionInds[pn]:
+#         sname = sessionNames[ei][4:]
+#         ops = np.load(f'{planeDir}{sname}/plane0/ops.npy', allow_pickle=True).item()
+#         mimgList.append(ops['meanImg'])
+#     viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
 
-#%%
-pn = 3
-sname = '002'
+# #%%
+# pn = 3
+# sname = '002'
 
-imgs = []
-ops = np.load(f'{baseDir}{mouse:03}/plane_{pn}/{sname}/plane0/backup/ops.npy', allow_pickle=True).item()
-imgs.append(ops['meanImg'])
-ops = np.load(f'{baseDir}{mouse:03}/plane_{pn}/{sname}/plane0/ops.npy', allow_pickle=True).item()
-imgs.append(ops['meanImg'])
-napari.view_image(np.array(imgs))
+# imgs = []
+# ops = np.load(f'{baseDir}{mouse:03}/plane_{pn}/{sname}/plane0/backup/ops.npy', allow_pickle=True).item()
+# imgs.append(ops['meanImg'])
+# ops = np.load(f'{baseDir}{mouse:03}/plane_{pn}/{sname}/plane0/ops.npy', allow_pickle=True).item()
+# imgs.append(ops['meanImg'])
+# napari.view_image(np.array(imgs))
 
-#%%
-pn = 2
-sname = '5555_103'
+# #%%
+# pn = 2
+# sname = '5555_103'
 
-imgs = []
-opsPrev = np.load(f'{baseDir}{mouse:03}/plane_{pn}/{sname}/plane0/backup/ops.npy', allow_pickle=True).item()
-imgs.append(opsPrev['meanImg'])
-opsNew = np.load(f'{baseDir}{mouse:03}/plane_{pn}/{sname}/plane0/ops.npy', allow_pickle=True).item()
-imgs.append(opsNew['meanImg'])
-napari.view_image(np.array(imgs))
+# imgs = []
+# opsPrev = np.load(f'{baseDir}{mouse:03}/plane_{pn}/{sname}/plane0/backup/ops.npy', allow_pickle=True).item()
+# imgs.append(opsPrev['meanImg'])
+# opsNew = np.load(f'{baseDir}{mouse:03}/plane_{pn}/{sname}/plane0/ops.npy', allow_pickle=True).item()
+# imgs.append(opsNew['meanImg'])
+# napari.view_image(np.array(imgs))
