@@ -15,8 +15,8 @@ removingSessions = {'025Upper': ['014', '016', '017','018','024','025','5555_001
                     '027Lower': [],
                     '030Upper': [],
                     '030Lower': [],
-                    '036Upper': [],
-                    '036Lower': [],
+                    '036Upper': ['004', '013', '014', '019', '020', '021', '5555_001', '5555_111', '5555_101', '5555_110',  '9999_1', '9999_2'],
+                    '036Lower': ['002', '008', '011', '013', '019', '020', '021', '901', '5554_001', '5554_011', '9998_1', '9998_2' ],
                     '037Upper': [],
                     '037Lower': [],
                     '038Upper': [],
@@ -87,7 +87,7 @@ def get_session_names(planeDir, mouse, planeNum):
 
 
 #%%
-mi = 0
+mi = 3
 mouse = mice[mi]
 # for pn in range(1,5):
 for pn in range(1,9):
@@ -194,29 +194,27 @@ for pn in range(1,9):
 
 #%% Testing the result
 # Part of '210908_data_stitching_test.py'
-#(1) Testing the process itself (did it work as it was supposed to work?)
-
-# pn = 4
-# s2pPlaneDir = f'{s2pDir}{mouse:03}/plane_{pn}/'
-# stitchedOpsFn = f'{s2pPlaneDir}plane0/stitched_ops.npy'
-# stitchedDataFn = f'{s2pPlaneDir}plane0/data.bin'
-# stitchedOps = np.load(stitchedOpsFn, allow_pickle=True).item()
-# with BinaryFile(Ly=Ly, Lx=Lx, read_filename=stitchedDataFn) as f:
-#     nSessions = len(stitchedOps['useSessionNames'])
-#     nframes = np.array(stitchedOps['nFrames'])
-#     startFrames = np.concatenate(([0],np.cumsum(nframes)[:-1]))
-#     endFrames= np.cumsum(nframes)
-#     meanImgs = []
-#     for i in range(nSessions):
-#     # for i in range(5):
-#         meanImgs.append(f.ix(range(startFrames[i],endFrames[i]), is_slice=True).mean(axis=0))
+# (1) Testing the process itself (did it work as it was supposed to work?)
+mi = 3
+mouse = mice[mi]
+pn = 4
+s2pPlaneDir = f'{s2pDir}{mouse:03}/plane_{pn}/'
+stitchedOpsFn = f'{s2pPlaneDir}plane0/stitched_ops.npy'
+stitchedDataFn = f'{s2pPlaneDir}plane0/data.bin'
+stitchedOps = np.load(stitchedOpsFn, allow_pickle=True).item()
+with BinaryFile(Ly=Ly, Lx=Lx, read_filename=stitchedDataFn) as f:
+    nSessions = len(stitchedOps['useSessionNames'])
+    nframes = np.array(stitchedOps['nFrames'])
+    startFrames = np.concatenate(([0],np.cumsum(nframes)[:-1]))
+    endFrames= np.cumsum(nframes)
+    meanImgs = []
+    for i in range(nSessions):
+    # for i in range(5):
+        meanImgs.append(f.ix(range(startFrames[i],endFrames[i]), is_slice=True).mean(axis=0))
         
 
-# viewer = napari.Viewer()
-# for i in range(nSessions):
-# # for i in range(5):    
-#     viewer.add_image(np.array([stitchedOps['regImgs'][i], meanImgs[i]]), visible=False)
+viewer = napari.Viewer()
+for i in range(nSessions):
+# for i in range(5):    
+    viewer.add_image(np.array([stitchedOps['regImgs'][i], meanImgs[i]]), visible=False)
    
-# #%%
-# #(2) Testing FOV matching again, for the last time
-# napari.view_image(np.array(meanImgs))
