@@ -65,25 +65,25 @@ def get_session_names(planeDir, mouse, planeNum):
 
 #%% Check mean images and pick horrible sessions
 # In each mouse
-mi = 0
+mi = 2
 mouse = mice[mi]
 # mean images
-# viewer = napari.Viewer()
+viewer = napari.Viewer()
 bdpList = {}
 errorSessionInds = {}
 for pn in range(1,9):
     planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
     sessionNames = get_session_names(planeDir, mouse, pn)
-    # mimgList = []
+    mimgList = []
     bdpPlane = []
     for sname in sessionNames:
         sname = sname[4:]
         ops = np.load(f'{planeDir}{sname}/plane0/ops.npy', allow_pickle=True).item()
-        # mimgList.append(ops['meanImg'])
+        mimgList.append(ops['meanImg'])
         bdpPlane.append(ops['bidiphase'])
     bdpList[pn] = np.array(bdpPlane)
     errorSessionInds[pn] = np.where(np.array(bdpPlane))[0]
-    # viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
+    viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
 #%%
 # ops = default_ops()
 # ops['tau'] = 1.5
@@ -148,16 +148,37 @@ for pn in range(1,9):
 #                     6: [1,2,5,13,22,25,26,28,30],
 #                     7: [1,4,8,10,11,12,13,20,25,28,30,32],
 #                     8: [1,16,25]}
-errorSessionInds = {1: [],
-                    2: [],
-                    3: [23],
-                    4: [1,7],
-                    5: [1,10,13,25,28,30],
-                    6: [1,2,5,13,22,25,26,28,30],
-                    7: [1,4,8,10,11,12,13,20,25,28,30,32],
-                    8: [1,16,25]}
 
 
+# JK027
+# errorSessionInds = {1: [2, 13, 17, 19, 20],
+#                     2: [2, 13, 17, 19, 20],
+#                     3: [2, 3, 13, 17, 19, 20],
+#                     4: [2, 13, 17, 19, 20],
+#                     5: [26,27],
+#                     6: [2,20,23,27],
+#                     7: [2,3,20,26,27],
+#                     8: [2,27]}
+
+# JK030
+errorSessionInds = {1: [1, 2, 8, 21, 24],
+                    2: [1, 2, 8, 11, 18, 21, 24],
+                    3: [1, 2, 8, 11, 24, 26],
+                    4: [1, 2, 8, 11, 21, 22, 24, 26],
+                    5: [5, 9, 14, 17, 26, 28, 29],
+                    6: [3, 9, 10, 14, 29, 31, 32],
+                    7: [1, 5, 10, 12, 14, 15, 17, 19, 21, 29, 32],
+                    8: [2, 3, 5, 8, 11, 12, 17, 18, 19, 24, 26, 27, 29, 32]}
+
+
+# errorSessionInds = {1: [19, 20],
+#                     2: [2, 13, 17, 19, 20],
+#                     3: [2, 3, 13, 17, 19, 20],
+#                     4: [2, 13, 17, 19, 20],
+#                     5: [26,27],
+#                     6: [2,20,23,27],
+#                     7: [2,3,20,26,27],
+#                     8: [2,27]}
 
 # #%% check ref images
 # viewer = napari.Viewer()
@@ -195,41 +216,35 @@ for pn in range(1,9):
         snameFull = sessionNames[ei]
         sname = snameFull[4:]
         print(f'Processing JK{mouse:03} plane {pn} session {sname}')
-        
         sessionDir = f'{planeDir}{sname}/plane0/'
-        prevOps = np.load(f'{sessionDir}/ops.npy', allow_pickle=True).item()
-        
         tempFnList = [fn for fn in h5List if snameFull in fn]
         for nimginit in nimginitList:
-            if nimginit == prevOps['nimg_init']:
-                print(f'Skipping {nimginit} due to redundancy')
-            else:
-                print(f'nimg_init {nimginit}')
-                nframeTotal = 0
-                for fi, fn in enumerate(tempFnList):
-                    with h5py.File(fn, 'r') as f:
-                        nframe = f['data'].shape[0]
-                        nframeTotal += nframe
-                        if fi == 0:
-                            Ly,Lx = f['data'].shape[1:]
-                            data = np.zeros((nimginit, Ly, Lx), dtype=np.int16)    
-                frames = np.linspace(0,nframeTotal,nimginit+1, dtype=int)[:-1]
-                nframeCurr = 0
-                dataCurr = 0
-                for fi, fn in enumerate(tempFnList):
-                    with h5py.File(fn, 'r') as f:
-                        nframe = f['data'].shape[0]
-                        useInd = np.where(frames < nframe)[0]
-                        data[dataCurr:dataCurr+len(useInd), :, :] = \
-                            f['data'][frames[useInd]-nframeCurr,:,:]
-                        dataCurr += len(useInd)
-                        nframeCurr += nframe
-                bdphase = bidiphase.compute(data)
-                if bdphase != 0: # works for both opsPrev['bidiphase']==0 and != 0
-                    foundflag = 1
-                    print(f'Found a new bidirectional offset {bdphase} at {nimginit}')
-                    ops['nimg_init'] = nimginit
-                    break
+            print(f'nimg_init {nimginit}')
+            nframeTotal = 0
+            for fi, fn in enumerate(tempFnList):
+                with h5py.File(fn, 'r') as f:
+                    nframe = f['data'].shape[0]
+                    nframeTotal += nframe
+                    if fi == 0:
+                        Ly,Lx = f['data'].shape[1:]
+                        data = np.zeros((nimginit, Ly, Lx), dtype=np.int16)    
+            frames = np.linspace(0,nframeTotal,nimginit+1, dtype=int)[:-1]
+            dataCurr = 0
+            for fi, fn in enumerate(tempFnList):
+                with h5py.File(fn, 'r') as f:
+                    nframe = f['data'].shape[0]
+                    useInd = np.where(frames < nframe)[0]
+                    data[dataCurr:dataCurr+len(useInd), :, :] = \
+                        f['data'][frames[useInd],:,:]
+                    dataCurr += len(useInd)
+                    frames = frames - nframe
+                    frames = frames[frames>=0]
+            bdphase = bidiphase.compute(data)
+            if bdphase != 0: # works for both opsPrev['bidiphase']==0 and != 0
+                foundflag = 1
+                print(f'Found a new bidirectional offset {bdphase} at {nimginit}')
+                ops['nimg_init'] = nimginit
+                break
             
         if foundflag:
             # Before running a new suite2p, back up everything
@@ -259,19 +274,19 @@ for pn in range(1,9):
         
 
 
-# #%% Check again if the issue is fixed
-# viewer = napari.Viewer()
-# for pn in range(1,9):
-#     planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
-#     sessionNames = get_session_names(planeDir, mouse, pn)
-#     mimgList = []
-#     for ei in errorSessionInds[pn]:
-#         sname = sessionNames[ei][4:]
-#         ops = np.load(f'{planeDir}{sname}/plane0/ops.npy', allow_pickle=True).item()
-#         mimgList.append(ops['meanImg'])
-#     viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
+#%% Check again if the issue is fixed
+viewer = napari.Viewer()
+for pn in range(1,9):
+    planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
+    sessionNames = get_session_names(planeDir, mouse, pn)
+    mimgList = []
+    for ei in errorSessionInds[pn]:
+        sname = sessionNames[ei][4:]
+        ops = np.load(f'{planeDir}{sname}/plane0/ops.npy', allow_pickle=True).item()
+        mimgList.append(ops['meanImg'])
+    viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
 
-# #%%
+#%%
 # pn = 3
 # sname = '002'
 
@@ -292,3 +307,14 @@ for pn in range(1,9):
 # opsNew = np.load(f'{baseDir}{mouse:03}/plane_{pn}/{sname}/plane0/ops.npy', allow_pickle=True).item()
 # imgs.append(opsNew['meanImg'])
 # napari.view_image(np.array(imgs))
+
+#%% Remove backup folders
+for pn in range(1,9):
+    planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
+    sessionNames = get_session_names(planeDir, mouse, pn)
+    for ei in errorSessionInds[pn]:
+        snameFull = sessionNames[ei]
+        sname = snameFull[4:]
+        backupDir =f'{planeDir}{sname}/plane0/backup/'
+        if os.path.isdir(backupDir):
+            shutil.rmtree(backupDir)

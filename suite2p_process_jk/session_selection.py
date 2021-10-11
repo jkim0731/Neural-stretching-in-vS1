@@ -19,7 +19,7 @@ from skimage import exposure
 import gc
 gc.enable()
 
-h5Dir = 'D:/TPM/JK/h5/'
+h5Dir = 'I:/'
 mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
 refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
 
@@ -61,8 +61,8 @@ def get_session_names(baseDir, mouse, planeNum):
 
 #%% Plot correlation values
 # For each mouse, and each volume, import reg results
-mi = 3
-pnTop = 5 # either 1 or 5
+mi = 1
+pnTop = 1 # either 1 or 5
 volume = 'upper' if pnTop < 5 else 'lower'
 mouse = mice[mi]
 mouseDir = f'{h5Dir}{mouse:03}/'
@@ -153,13 +153,45 @@ for pn in range(pnTop, pnTop+4):
         sname = sessionNames[si]
         viewer.add_image(mat, rgb=True, name=f'{si}: {sname} p{pn}', visible=False)
 
+#%% Compare two FOVs
+# When mismatch might have been due to bad nonrigid registration
+pn = 2
+testSi = 6
+testSn = sessionNames[testSi][4:]
+sessionDir = f'{mouseDir}plane_{pn}/{testSn}/plane0/'
+testOps = np.load(f'{sessionDir}ops.npy', allow_pickle=True).item()
+refName = refSn[4:]
+refDir = f'{mouseDir}plane_{pn}/{refName}/plane0/'
+refOps = np.load(f'{refDir}ops.npy', allow_pickle=True).item()
+fix, ax = plt.subplots(2,1)
+ax[0].imshow(refOps['meanImg'], cmap='gray')
+ax[1].imshow(testOps['meanImg'], cmap='gray')
+
+#%% Compare multiple "original" FOVs
+# Mean images, before registering to the reference image
+# To check across sessions (e.g., spontaneous and regular training)
+pn = 4
+testSnList = ['006', '5555_002', '5555_012']
+meanImgList = []
+for testSn in testSnList:
+    sessionDir = f'{mouseDir}plane_{pn}/{testSn}/plane0/'
+    testOps = np.load(f'{sessionDir}ops.npy', allow_pickle=True).item()
+    meanImgList.append(testOps['meanImg'])
+# fix, ax = plt.subplots(3,1)
+# for ai in range(3):
+#     ax[ai].imshow(meanImgList[ai], cmap='gray')
+#%%
+napari.view_image(np.array(meanImgList))
+
+
+
 #%% Final confirmation with selected sessions
 removingSessions = {'025Upper': ['014', '016', '017','018','024','025','5555_001','5555_004','5555_014','5555_103','9999_1', '9999_2'],
                     '025Lower': ['011', '012', '016','025','5554_001','5554_003','5554_012','5554_013','5554_103','9998_1', '9998_2'],
-                    '027Upper': [],
-                    '027Lower': [],
-                    '030Upper': [],
-                    '030Lower': [],
+                    '027Upper': ['007', '015', '016', '025', '5555_001', '5555_003', '5555_104', '9999_1', '9999_2'],
+                    '027Lower': ['007', '008', '025', '5554_001', '5554_002', '5554_003', '5554_012', '9998_1', '9998_2'],
+                    '030Upper': ['014','015','017', '5555_001', '9999_1'],
+                    '030Lower': ['015', '017', '018', '019', '021', '022', '023', '024', '025', '5554_001', ],
                     '036Upper': ['004', '013', '014', '019', '020', '021', '5555_001', '5555_111', '5555_101', '5555_110',  '9999_1', '9999_2'],
                     '036Lower': ['002', '008', '011', '013', '019', '020', '021', '901', '5554_001', '5554_011', '9998_1', '9998_2' ],
                     '037Upper': [],
