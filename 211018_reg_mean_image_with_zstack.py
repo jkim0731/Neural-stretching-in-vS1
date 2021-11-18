@@ -898,12 +898,11 @@ Include z-drift calculation.
 
 #%% Test in other session, other planes, other mice
 #%% Read plane and register zstack
-mi = 3
+mi = 0
 mouse = mice[mi]
-pn = 1
 refSession = refSessions[mi]
 imagingFreq = freq[mi]
-sessionNames = get_session_names(f'{h5Dir}{mouse:03}/plane_{pn}/', mouse, pn)
+
 
 # Load z-stack and register using StackReg, in reverse order
 srRigid = StackReg(StackReg.RIGID_BODY)
@@ -916,12 +915,14 @@ zstack = np.moveaxis(mat['zstack'], -1, 0)
 zstack = np.flip(zstack, axis=0)
 nplane = zstack.shape[0]
 
-zstackReg = srRigid.register_transform_stack(zstack, axis=0, reference='previous')
+zstackReg = srRigid.register_transform_stack(zstack[:,:,100:716], axis=0, reference='previous')
 
 napari.view_image(zstackReg)
 
 #%% Choose a session and calculate # of bins (division), read binary files
-si = 1
+pn = 3
+sessionNames = get_session_names(f'{h5Dir}{mouse:03}/plane_{pn}/', mouse, pn)
+si = 3
 sname = sessionNames[si][4:]
 
 trialsFnList = glob.glob(f'{h5Dir}{mouse:03}/{mouse:03}_{sname}_*.trials')
@@ -934,11 +935,11 @@ else:
     frameToUse = []
     for tfn in trialsFnList:
         trials = scipy.io.loadmat(tfn)
-        if not frameToUse:
+        if len(frameToUse)==0:
             frameToUse = trials['frame_to_use'][0,pn-1]
         else:
             tempFtu = trials['frame_to_use'][0,pn-1] + np.amax(frameToUse)
-            frameToUse = np.hstack(frameToUse, tempFtu)
+            frameToUse = np.hstack((frameToUse, tempFtu))
 
 tminSpent = round((frameToUse[0,-1] - frameToUse[0,0]) / (imagingFreq*4) / 60)
 
@@ -964,10 +965,10 @@ napari.view_image(np.array(sessionImgsDivTemp))
 
 #%% Remove margins and match with z-stack by eyes
 
-topMargin = 7
+topMargin = 28
 bottomMargin = 381
-leftMargin = 11
-rightMargin = 684
+leftMargin = 21
+rightMargin = 681
 sessionImgsDiv = [sidt[topMargin:bottomMargin,leftMargin:rightMargin] for sidt in sessionImgsDivTemp]
 
 mimg = sessionOps['meanImg'][topMargin:bottomMargin,leftMargin:rightMargin]
@@ -979,9 +980,9 @@ Visual matching
 
 #%% Check registration
 
-estDepthInd = 84
-estYpoint = 142
-estXpoint = 142
+estDepthInd = 210
+estYpoint = 199
+estXpoint = 0
 
 testImg = sessionImgsDiv[0]
 Ly = min(testImg.shape[0], zstackReg.shape[1]-estYpoint)
@@ -989,18 +990,23 @@ Lx = min(testImg.shape[1], zstackReg.shape[2]-estXpoint)
 testImg = testImg[:Ly, :Lx]
 
 srBi = StackReg(StackReg.BILINEAR)
+srRigid = StackReg(StackReg.RIGID_BODY)
 
 numTestPlane = 20 # up and down, total numTestPlane*2+1 planes
 numTotalPlane = numTestPlane*2+1
 
 # List of testants
-regKernelSizeList = [i*10 for i in range(4,11,2)]
+srList = [srBi, srRigid]
+# regKernelSizeList = [i*10 for i in range(4,11,2)]
+regKernelSizeList = [100, 300]
 numRK = len(regKernelSizeList)
-corrKernelSizeList = [i*10 for i in range(4,11,2)]
+# corrKernelSizeList = [i*10 for i in range(4,11,2)]
+corrKernelSizeList = [40]
 numCK = len(corrKernelSizeList)
-numAvgList = [1,3,5,11]
+# numAvgList = [1,3,5,11]
+numAvgList = [5, 11]
 numNA = len(numAvgList)
-corrEachReg = np.zeros((numRK, numCK, numNA, numTotalPlane))
+corrEachReg = np.zeros((numRK, numCK, numNA, numTotalPlane, len(srList)))
 
 regImgAllList = []
 time0 = time.time()
@@ -1031,20 +1037,23 @@ for regKi in range(numRK):
             if corrKi == 0:
                 regImgList = []
             for i in range(numTotalPlane):
-                refImgReg = clahe_each(zstackAvgTmp[i, estYpoint:estYpoint+Ly, estXpoint:estXpoint+Lx],
-                                       kernel_size = regKernelSize)
-                tform = srBi.register(refImgReg, testImgReg)
-                out = srBi.transform(testImg, tmat=tform)
-                outEachCorr = clahe_each(out, kernel_size = corrKernelSize)
-                refImgCorr = clahe_each(zstackAvgTmp[i, estYpoint:estYpoint+Ly, estXpoint:estXpoint+Lx],
-                                       kernel_size = corrKernelSize)
-                corrEachReg[regKi, corrKi, avgNi, i] = np.corrcoef(outEachCorr.flatten(), refImgCorr.flatten())[0,1]
-            
-                # outSingleCorr = clahe_each(srBi.transform(testImg, tmat = tformSingle),
-                #                               kernel_size = corrKernelSize)
-                # corrSingleReg[i] = np.corrcoef(outSingleCorr.flatten(), refImgCorr.flatten())[0,1]
-                if corrKi == 0:
-                    regImgList.append(out)
+                for sri in range(len(srList)):
+                    sr = srList[sri]
+                    refImgReg = clahe_each(zstackAvgTmp[i, estYpoint:estYpoint+Ly, estXpoint:estXpoint+Lx],
+                                           kernel_size = regKernelSize)
+                    tform = sr.register(refImgReg, testImgReg)
+                    out = sr.transform(testImg, tmat=tform)
+    
+                    outEachCorr = clahe_each(out, kernel_size = corrKernelSize)
+                    refImgCorr = clahe_each(zstackAvgTmp[i, estYpoint:estYpoint+Ly, estXpoint:estXpoint+Lx],
+                                           kernel_size = corrKernelSize)
+                    corrEachReg[regKi, corrKi, avgNi, i, sri] = np.corrcoef(outEachCorr.flatten(), refImgCorr.flatten())[0,1]
+                
+                    # outSingleCorr = clahe_each(srBi.transform(testImg, tmat = tformSingle),
+                    #                               kernel_size = corrKernelSize)
+                    # corrSingleReg[i] = np.corrcoef(outSingleCorr.flatten(), refImgCorr.flatten())[0,1]
+                    if corrKi == 0:
+                        regImgList.append(out)
             time2 = time.time()
             avgNumLoopSpentMin = int(time2-time1)//60
             avgNumLoopSpentSec = int(time2-time1)%60
@@ -1057,55 +1066,56 @@ print(f'Total {regLoopSpentMin} min {regLoopSpentSec} sec has passed.')
 cmap = plt.get_cmap('viridis_r')(range(256))[::int(256/numCK), :3]
 for avgNi in range(numNA):
     numAvg = numAvgList[avgNi]
-    fig, ax = plt.subplots(2,2, figsize=(13,7))
-    for regKi in range(numRK):
-        regKernelSize = regKernelSizeList[regKi]
-        ayi = regKi // 2
-        axi = regKi % 2
-        for corrKi in range(numCK):
-            corrKernelSize = corrKernelSizeList[corrKi]
-            ax[ayi, axi].plot(range(-numTestPlane, numTestPlane+1), corrEachReg[regKi, corrKi, avgNi, :], '-', color=cmap[corrKi,:],
-                              label=f'Corr kernel size: ({corrKernelSize},{corrKernelSize})')
-        if regKi == 0:
-            ax[ayi, axi].legend()
-        if regKi == 2:
-            ax[ayi, axi].set_ylabel('Pixel correation', fontsize=15)
-            ax[ayi, axi].set_xlabel('Relative z-position', fontsize=15)
-        ax[ayi, axi].set_title(f'Reg kernel size: ({regKernelSize},{regKernelSize})', fontsize=15)
-        ax[ayi, axi].set_ylim(0.3, 0.6)
-        ax[ayi, axi].set_yticks([n/10 for n in range(3,7)])
-    fig.suptitle(f'Z-stack averaging {numAvg}', fontsize=20)
+    for sri in range(len(srList)):
+        fig, ax = plt.subplots(2,2, figsize=(13,7))
+        for regKi in range(numRK):
+            regKernelSize = regKernelSizeList[regKi]
+            ayi = regKi // 2
+            axi = regKi % 2
+            for corrKi in range(numCK):
+                corrKernelSize = corrKernelSizeList[corrKi]
+                ax[ayi, axi].plot(range(-numTestPlane, numTestPlane+1), corrEachReg[regKi, corrKi, avgNi, :, sri], '-', color=cmap[corrKi,:],
+                                  label=f'Corr kernel size: ({corrKernelSize},{corrKernelSize})')
+            if regKi == 0:
+                ax[ayi, axi].legend()
+            if regKi == 2:
+                ax[ayi, axi].set_ylabel('Pixel correation', fontsize=15)
+                ax[ayi, axi].set_xlabel('Relative z-position', fontsize=15)
+            ax[ayi, axi].set_title(f'Reg kernel size: ({regKernelSize},{regKernelSize})', fontsize=15)
+            # ax[ayi, axi].set_ylim(0.3, 0.6)
+            # ax[ayi, axi].set_yticks([n/10 for n in range(3,7)])
+        fig.suptitle(f'Z-stack averaging {numAvg}, sri = {sri}', fontsize=20)
 
 
 #%% Compare peaks within the session
 #%% Compare across images with best paramters
 bestRegKernelSize = 100
 bestCorrKernelSize = 40
-bestAvgNum = 3
+bestAvgNum = 5
+sr = srBi
 
 time0 = time.time()
 corrSessionPlane = np.zeros((division, numTotalPlane))
-bestRKi = np.where(np.array(regKernelSizeList)==bestRegKernelSize)[0][0]
-bestCKi = np.where(np.array(corrKernelSizeList)==bestCorrKernelSize)[0][0]
-bestANi = np.where(np.array(numAvgList)==bestAvgNum)[0][0]
 
-refZstackReg = np.zeros((numTotalPlane,zstackReg.shape[1],zstackReg.shape[2]))
-refZstackCorr = np.zeros((numTotalPlane,zstackReg.shape[1],zstackReg.shape[2]))
+refZstack = np.zeros((numTotalPlane,Ly,Lx))
+refZstackReg = np.zeros((numTotalPlane,Ly,Lx))
+refZstackCorr = np.zeros((numTotalPlane,Ly,Lx))
 nplanes = zstackReg.shape[0]
 for pi in range(numTotalPlane):
     startPlaneNum = estDepthInd - numTestPlane - (bestAvgNum // 2) + pi
     endPlaneNum = startPlaneNum + bestAvgNum
-    tempZimg = zstackReg[startPlaneNum:endPlaneNum, :, :].mean(axis=0)
+    tempZimg = zstackReg[startPlaneNum:endPlaneNum, estYpoint:estYpoint+Ly, estXpoint:estXpoint+Lx].mean(axis=0)
+    refZstack[pi,:,:] = tempZimg
     refZstackReg[pi,:,:] = clahe_each(tempZimg, kernel_size = bestRegKernelSize)
     refZstackCorr[pi,:,:] = clahe_each(tempZimg, kernel_size = bestCorrKernelSize)
+    
 time1 = time.time()
 zstackMin = int(time1-time0) // 60
 zstackSec = int(time1-time0) % 60
 print(f'{zstackMin} min {zstackSec} sec passed for z-stack registration and contrast adjustment.')
 
-corrSessionPlane[0,:] = corrEachReg[bestRKi, bestCKi, bestANi,:]
-
-for di in range(1,division):
+tformList = []
+for di in range(division):
     time1 = time.time()
     print(f'Running {di}/{division-1}')
     testImg = sessionImgsDiv[di]
@@ -1116,11 +1126,15 @@ for di in range(1,division):
     testImgReg = clahe_each(testImg, kernel_size = bestRegKernelSize)
     corrImgReg = clahe_each(testImg, kernel_size = bestCorrKernelSize)
     for pi in range(numTotalPlane):
-        refImgReg = refZstackReg[pi,estYpoint:estYpoint+Ly, estXpoint:estXpoint+Lx]
-        refImgCorr = refZstackCorr[pi,estYpoint:estYpoint+Ly, estXpoint:estXpoint+Lx]
-
-        tform = srBi.register(refImgReg, testImgReg)
-        out = srBi.transform(testImg, tmat=tform)
+        refImgReg = refZstackReg[pi,:, :]
+        refImgCorr = refZstackCorr[pi,:, :]
+        
+        if di == 0:
+            tform = sr.register(refImgReg, testImgReg)
+            tformList.append(tform)
+        else:
+            tform = tformList[pi]
+        out = sr.transform(testImg, tmat=tform)
         outCorr = clahe_each(out, kernel_size=bestCorrKernelSize)
 
         corrSessionPlane[di,pi] = np.corrcoef(outCorr.flatten(), refImgCorr.flatten())[0,1]
@@ -1134,26 +1148,45 @@ totSec = int(time2 - time0) % 60
 print(f'Total {totMin} min {totSec} sec passed.')
 
 cmap = plt.get_cmap('plasma_r')(range(256))[::int(256/(division)), :3]
-corrPeaks = np.zeros(division)
-smoothing = 3
-fig, ax = plt.subplots(1,2)
+# corrPeaks = np.zeros(division)
+# smoothing = 3
+# fig, ax = plt.subplots(1,2)
+# for di in range(division):
+#     ax[0].plot(range(-numTestPlane,numTestPlane+1), corrSessionPlane[di,:], '-', color=cmap[di,:], label=f'Time bin {di}')
+#     tck = interpolate.splrep(np.arange(-numTestPlane, numTestPlane+1), corrSessionPlane[di,:], s=smoothing)
+#     xnew = np.arange(-numTestPlane, numTestPlane+1, 0.5)
+#     ynew = interpolate.splev(xnew,tck,der=0)
+#     corrPeaks[di] = np.argmax(ynew)
+#     ax[1].plot(range(-numTestPlane*2,numTestPlane*2+2), ynew/np.amax(ynew), '-', color=cmap[di,:])
+# ax[0].legend()
+# ax[0].set_xlabel('Relative z-position', fontsize=15)
+# ax[0].set_ylabel('Pixel correation', fontsize=15)
+# ax[1].set_xlabel('Relative z-position in $\mu$m', fontsize=15)
+# ax[1].set_ylabel('Normalized correation', fontsize=15)
+# fig.suptitle(f'JK{mouse} S{sname} plane{pn}')
+
+smoothing = 1
+fig, ax = plt.subplots()
 for di in range(division):
-    ax[0].plot(range(-numTestPlane,numTestPlane+1), corrSessionPlane[di,:], '-', color=cmap[di,:], label=f'Time bin {di}')
-    tck = interpolate.splrep(np.arange(-numTestPlane, numTestPlane+1), corrSessionPlane[di,:], s=smoothing)
-    xnew = np.arange(-numTestPlane, numTestPlane+1, 0.5)
-    ynew = interpolate.splev(xnew,tck,der=0)
-    corrPeaks[di] = np.argmax(ynew)
-    ax[1].plot(range(-numTestPlane*2,numTestPlane*2+2), ynew/np.amax(ynew), '-', color=cmap[di,:])
-ax[0].legend()
-ax[0].set_xlabel('Relative z-position', fontsize=15)
-ax[0].set_ylabel('Pixel correation', fontsize=15)
-ax[1].set_xlabel('Relative z-position in $\mu$m', fontsize=15)
-ax[1].set_ylabel('Normalized correation', fontsize=15)
-fig.suptitle(f'JK{mouse} S{sname} plane{pn}')
-zdriftMicron = corrPeaks - corrPeaks[0]
+    ax.plot(range(-numTestPlane,numTestPlane+1), corrSessionPlane[di,:], '-', color=cmap[di,:], label=f'Time bin {di}')
+ax.legend()
+ax.set_xlabel('Relative z-position', fontsize=15)
+ax.set_ylabel('Pixel correation', fontsize=15)
+ax.set_title(f'JK{mouse} S{sname} plane{pn}')
+corrPeaks = np.argmax(corrSessionPlane, axis=1)*2
+
+zdriftMicron = (corrPeaks - corrPeaks[0]).astype(int)
 
 print(zdriftMicron)
-
+perHrAvg = round(zdriftMicron[-1]/(division-1)*6)
+print(f'{perHrAvg} /hr')
+#%%
+normCorrSessionPlane = corrSessionPlane / np.tile(np.amax(corrSessionPlane, axis=1), (numTotalPlane, 1)).T
+figure, ax = plt.subplots()
+for di in range(division):
+    ax.plot(range(-numTestPlane,numTestPlane+1), normCorrSessionPlane[di,:], '-', color=cmap[di,:], label=f'Time bin {di}')
+#%%
+napari.view_image(refZstack)
 #%% Save the result
 d = {'plane': [pn], 'session': [sname], 'estDepthInd': [estDepthInd], 'estYpoint': [estYpoint], 'estXpoint': [estXpoint],
      'numTotalPlane': [numTotalPlane], 'bestRegKernelSize': [bestRegKernelSize], 'bestCorrKernelSize': [bestCorrKernelSize], 'bestAvgNum': [bestAvgNum],
@@ -1185,8 +1218,41 @@ print(f'S_{sname} plane {pn} saved.')
 
 
 
+#%% 2021/10/29
+#%% Re-calculating peaks
+z027 = pd.read_csv('D:/TPM/JK/h5/zdrift_027.csv')
+z036 = pd.read_csv('D:/TPM/JK/h5/zdrift_036.csv')
+z052 = pd.read_csv('D:/TPM/JK/h5/zdrift_052.csv')
 
 
+#%%
+
+
+
+
+
+
+
+
+
+
+
+
+#%% Example of clahe
+mimg2 = clahe_each(mimg, kernel_size=100)
+mimg3 = clahe_each(mimg, kernel_size=40)
+napari.view_image(np.array([img_norm(mimg), img_norm(mimg2), img_norm(mimg3)]))
+
+#%%
+cmap = plt.get_cmap('plasma_r')(range(256))[::int(256/(10)), :3]
+fig, ax = plt.subplots()
+
+for i in range(10):
+    ax.plot(range(-20,21), a[i], color=cmap[i,:], label=f'Time bin {i}')
+ax.legend()
+
+ax.set_xlabel('Relative z-position', fontsize=15)
+ax.set_ylabel('Pixel correation', fontsize=15)
 
 
 

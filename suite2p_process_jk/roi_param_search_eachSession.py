@@ -44,7 +44,7 @@ def roi_detection(ops, db):
     return numCell, numNotCell
 
 #%% Basic settings
-h5Dir = 'E:/'
+h5Dir = 'D:/TPM/JK/h5/'
 fastDir = 'C:/JK/' # This better be in SSD
 
 mice = [25,  27,  30,  36,  37,  38,  39,  41,  52,  53,  54,  56]
@@ -75,8 +75,8 @@ ops['nbinned']: 10000  # max number of binned frames for cell detection
 ops['max_overlap'] = 0.75  # cells with more overlap than this get removed during triage, before refinement
 ops['allow_overlap'] = False
 #%%
-# for mi in [0,3,8]:
-for mi in [8]:
+for mi in [0]:
+# for mi in [8]:
     mouse = mice[mi]
     ops['fs'] = freq[mi]
     ops['zoom'] = zoom[mi]
@@ -96,7 +96,7 @@ for mi in [8]:
         spontSi = np.where( (midNum>5000) & (midNum<6000) )[0]
         piezoSi = np.where(midNum>9000)[0]
         
-        if np.any(spontSi): 
+        if np.any(spontSi):
             spontTrialNum = np.unique(trialNum[spontSi]) # used only for mouse > 50
         
         if np.any(piezoSi):

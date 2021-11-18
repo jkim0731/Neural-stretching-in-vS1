@@ -41,8 +41,8 @@ def phase_corr(fixed, moving, transLim = 0):
 # whereas the first 1/4 look similar to the before-training spontaneous session, and
 # the last 1/4 look similar to the after-training spontaneous session.
 
-baseDir = 'H:/'
-mouse = '052'
+baseDir = 'D:/TPM/JK/h5/'
+mouse = '025'
 pn = 4
 session = '006'
 before = '5555_002'
@@ -78,7 +78,7 @@ napari.view_image(np.array(mov))
 
 #%% Compare changes across single session
 pn = 4
-session = '025'
+session = '022'
 
 division = 4
 sessionOps = np.load(f'{baseDir}{mouse}/plane_{pn}/{session}/plane0/ops.npy', allow_pickle=True).item()
@@ -96,3 +96,41 @@ with BinaryFile(Ly, Lx, read_filename=f'{baseDir}{mouse}/plane_{pn}/{session}/pl
 napari.view_image(np.array(sessionImgsDiv), name = f'JK{mouse} session {session} plane {pn}')
 
 
+
+#%% 
+'''
+After looking at suite2p trace, it seems maybe these are due to activity change.
+Background does not seem to change that much. 
+'''
+
+#%% Look at specific frame(s), at specific ROI, based onsuite2p GUI
+sessionStat = np.load(f'{baseDir}{mouse}/plane_{pn}/{session}/plane0/stat.npy', allow_pickle=True).tolist()
+#%%
+roiNum = 15
+bufferPix = 5
+ymin = min(sessionStat[15]['ypix']) - bufferPix
+ymax = max(sessionStat[15]['ypix']) + bufferPix
+xmin = min(sessionStat[15]['xpix']) - bufferPix
+xmax = max(sessionStat[15]['xpix']) + bufferPix
+
+startFrames = [260, 408, 6680, 6712]
+frameLen = 30
+
+imList = []
+with BinaryFile(Ly, Lx, read_filename=f'{baseDir}{mouse}/plane_{pn}/{session}/plane0/data.bin') as f:
+    data = f.data
+    for sf in startFrames:
+        imList.append(data[sf:sf+frameLen, ymin:ymax, xmin:xmax].mean(axis=0))
+
+#%%
+fig, ax = plt.subplots(2,2)
+ax[0,0].imshow(imList[0], cmap='gray')
+ax[0,0].set_title('Early inactive')
+ax[1,0].imshow(imList[1], cmap='gray')
+ax[1,0].set_title('Early active')
+ax[0,1].imshow(imList[2], cmap='gray')
+ax[0,1].set_title('Late inactive')
+ax[1,1].imshow(imList[3], cmap='gray')
+ax[1,1].set_title('Late active')
+fig.suptitle(f'JK{mouse} S{session} plane{pn} ROI{roiNum}')
+fig.tight_layout()

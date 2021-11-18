@@ -87,7 +87,7 @@ def get_session_names(planeDir, mouse, planeNum):
 
 
 #%%
-mi = 3
+mi = 0
 mouse = mice[mi]
 # for pn in range(1,5):
 for pn in range(1,9):

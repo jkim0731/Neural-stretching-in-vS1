@@ -5,6 +5,7 @@ Copied from 210910_test_stitched_roi_detection.py
 Results in suite2p files as well as "stitchedOps" file.
 
 2021/09/24 JK
+
 """
 import numpy as np
 from matplotlib import pyplot as plt
@@ -166,7 +167,7 @@ def roi_detection(ops, db):
 mi = 0
 mouse = mice[mi]
 
-for pn in range(6,9):
+for pn in range(1,9):
     s2pMouseDir = f'{s2pDir}{mouse:03}/'
     s2pPlaneDir = f'{s2pMouseDir}plane_{pn}/plane0/'
     stitchedOpsFn = f'{s2pPlaneDir}stitched_ops.npy'
@@ -224,7 +225,7 @@ for pn in range(6,9):
     ops['batch_size'] = 5000
     
     ops['nbinned'] = 100000  # max number of binned frames for cell detection        
-    ops['max_overlap'] = 0.75  # cells with more overlap than this get removed during triage, before refinement
+    ops['max_overlap'] = 0.5  # cells with more overlap than this get removed during triage, before refinement
     ops['allow_overlap'] = False
     
     np.save(f'{s2pPlaneDir}ops.npy', ops)

@@ -65,7 +65,7 @@ def get_session_names(planeDir, mouse, planeNum):
 
 #%% Check mean images and pick horrible sessions
 # In each mouse
-mi = 2
+mi = 8
 mouse = mice[mi]
 # mean images
 viewer = napari.Viewer()
@@ -161,24 +161,33 @@ for pn in range(1,9):
 #                     8: [2,27]}
 
 # JK030
-errorSessionInds = {1: [1, 2, 8, 21, 24],
-                    2: [1, 2, 8, 11, 18, 21, 24],
-                    3: [1, 2, 8, 11, 24, 26],
-                    4: [1, 2, 8, 11, 21, 22, 24, 26],
-                    5: [5, 9, 14, 17, 26, 28, 29],
-                    6: [3, 9, 10, 14, 29, 31, 32],
-                    7: [1, 5, 10, 12, 14, 15, 17, 19, 21, 29, 32],
-                    8: [2, 3, 5, 8, 11, 12, 17, 18, 19, 24, 26, 27, 29, 32]}
+# errorSessionInds = {1: [1, 2, 8, 21, 24],
+#                     2: [1, 2, 8, 11, 18, 21, 24],
+#                     3: [1, 2, 8, 11, 24, 26],
+#                     4: [1, 2, 8, 11, 21, 22, 24, 26],
+#                     5: [5, 9, 14, 17, 26, 28, 29],
+#                     6: [3, 9, 10, 14, 29, 31, 32],
+#                     7: [1, 5, 10, 12, 14, 15, 17, 19, 21, 29, 32],
+#                     8: [2, 3, 5, 8, 11, 12, 17, 18, 19, 24, 26, 27, 29, 32]}
 
+# JK052
+# errorSessionInds = {1: [1, 3, 26, 30, 32],
+#                     2: [1, 3, 26, 30, 32],
+#                     3: [1, 3, 26, 30, 32],
+#                     4: [1, 3, 26, 30, 32],
+#                     5: [1, 3, 26, 29, 30, 32],
+#                     6: [7, 26, 29, 30, 32],
+#                     7: [1, 2, 3, 14, 26, 29, 32],
+#                     8: [6, 7, 10, 11, 12, 14, 18, 19, 26, 29, 30, 32]}
 
-# errorSessionInds = {1: [19, 20],
-#                     2: [2, 13, 17, 19, 20],
-#                     3: [2, 3, 13, 17, 19, 20],
-#                     4: [2, 13, 17, 19, 20],
-#                     5: [26,27],
-#                     6: [2,20,23,27],
-#                     7: [2,3,20,26,27],
-#                     8: [2,27]}
+errorSessionInds = {1: [],
+                    2: [3, 26, 30, 32],
+                    3: [1, 3, 26, 30, 32],
+                    4: [1, 3, 26, 30, 32],
+                    5: [1, 3, 26, 29, 30, 32],
+                    6: [7, 26, 29, 30, 32],
+                    7: [1, 2, 3, 14, 26, 29, 32],
+                    8: [6, 7, 10, 11, 12, 14, 18, 19, 26, 29, 30, 32]}
 
 # #%% check ref images
 # viewer = napari.Viewer()
@@ -308,13 +317,16 @@ for pn in range(1,9):
 # imgs.append(opsNew['meanImg'])
 # napari.view_image(np.array(imgs))
 
+            
 #%% Remove backup folders
 for pn in range(1,9):
     planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
     sessionNames = get_session_names(planeDir, mouse, pn)
     for ei in errorSessionInds[pn]:
+        foundflag = 0
         snameFull = sessionNames[ei]
         sname = snameFull[4:]
-        backupDir =f'{planeDir}{sname}/plane0/backup/'
-        if os.path.isdir(backupDir):
-            shutil.rmtree(backupDir)
+        sessionBackupDir = f'{planeDir}{sname}/plane0/backup/'
+        if os.path.isdir(sessionBackupDir):
+            shutil.rmtree(sessionBackupDir)
+            print(f'Removing {sessionBackupDir}')
