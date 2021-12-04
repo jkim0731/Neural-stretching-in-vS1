@@ -192,8 +192,6 @@ def corr_match_to_best_z(imgs4reg, imgs4corr, zstack4reg, zstack4corr, stackReg 
         outFlatten = np.expand_dims(outTemp.flatten(),axis=0)
         corrVals[ipi,:] = np.corrcoef(outFlatten, zcorrFlatten)[0,1:]
     return corrVals, bestTformList, corrValsFirst, tformList
-<<<<<<< Updated upstream
-=======
 
 def corr_match_to_best_z_using_ref_session(refMimg4reg, refMimg4corr, imgs4corr, zstack4reg, zstack4corr, stackReg = None):
     if imgs4corr.ndim == 2:
@@ -267,7 +265,7 @@ def corr_match_to_best_z_suite2p(imgs, zstack, op):
         outFlatten = np.expand_dims(outTemp.flatten(),axis=0)
         corrVals[ipi,:] = np.corrcoef(outFlatten, zcorrFlatten)[0,1:]
     return corrVals, bestRigidOffsetsList, bestNonrigidOffsetsList, bestFrames, corrValsFirst, rigidOffsetsList, nonrigidOffsetsList
->>>>>>> Stashed changes
+
 
 def s2p_register(mimgList, op, rigid_offsets, nonrigid_offsets = None):
     # Register using rigid (and nonrigid, optionally) offsets
@@ -407,13 +405,9 @@ nplane = zstack.shape[0]
 if mi < 8:
     zstackReg = srRigid.register_transform_stack(zstack, axis=0, reference='previous')
 else:
-<<<<<<< Updated upstream
-    zstackReg = srRigid.register_transform_stack(zstack[:,:,90:710], axis=0, reference='previous')
-=======
     zstackReg = srRigid.register_transform_stack(zstack[:,:,100:700], axis=0, reference='previous')
 
 #%
->>>>>>> Stashed changes
 zstackAvg = np.zeros(zstackReg.shape)
 zstack4reg = np.zeros(zstackReg.shape)
 zstack4corr = np.zeros(zstackReg.shape)
@@ -439,11 +433,8 @@ absDepthVal = np.flip(zinfo['zstackDepths'])
 
 #%% First, look at all mean images and select trimming parameters
 # Also, save time-binned images in each session
-<<<<<<< Updated upstream
-pn = 5
-=======
+
 pn = 1
->>>>>>> Stashed changes
 sessionNames = get_session_names(f'{h5Dir}{mouse:03}/plane_{pn}/', mouse, pn)
 
 mimgList = []
@@ -478,10 +469,6 @@ for i, sn in enumerate(sessionNames):
         frameToUse = []
         for tfn in trialsFnList:
             trials = scipy.io.loadmat(tfn)
-<<<<<<< Updated upstream
-
-=======
->>>>>>> Stashed changes
             if len(sname) == 3:
                 try:
                     temp = trials['frame_to_use'][0, pn-1]
@@ -493,14 +480,11 @@ for i, sn in enumerate(sessionNames):
                 except:
                     temp = trials['frame_to_use'][tempPn-1]
 
-<<<<<<< Updated upstream
-=======
             if len(temp) == 1:
                 temp = temp[0].astype(np.uint64)
             else:
                 temp = temp.astype(np.uint64)
 
->>>>>>> Stashed changes
             if len(frameToUse)==0:
                 frameToUse = temp.astype(np.uint64)
             else:
@@ -532,17 +516,10 @@ napari.view_image(np.array(mimgList))
 # Rigid and bilinear registration works similarly at this point
 # Rigid seems more reasonable
 
-<<<<<<< Updated upstream
-topMargin = 11 # Could be larger for the bottom-most plane (4 and 8)
-bottomMargin = 363
-leftMargin = 2
-rightMargin = 683
-=======
 topMargin = 15 # Could be larger for the bottom-most plane (4 and 8)
 bottomMargin = 371
 leftMargin = 12
 rightMargin = 667
->>>>>>> Stashed changes
 
 trimMimg = np.array([img[topMargin:bottomMargin, leftMargin:rightMargin] for img in mimgList])
 
@@ -562,10 +539,7 @@ outSessionRigid = srRigid.transform_stack(trimMimgArr, tmats = tformSessionRigid
 outSessionRigid = outSessionRigid[1:,:,:]
 tformSessionRigid = tformSessionRigid[1:,:,:]
 # outSessionBi = outSessionBi[1:,:,:]
-<<<<<<< Updated upstream
 trimMimg = trimMimg[1:,:,:]
-=======
->>>>>>> Stashed changes
 
 viewer = napari.Viewer()
 viewer.add_image(trimMimg, name='before reg')
@@ -576,16 +550,10 @@ viewer.add_image(refSessionMimg, name='ref session')
 outSession = outSessionRigid.copy()
 
 #%% Find x,y,z position of the reference sessions
-<<<<<<< Updated upstream
-estZ = 96
-estY = 62
-estX = 76
-=======
+
 estZ = 86
 estY = 165
 estX = 135
->>>>>>> Stashed changes
-
 
 
 
@@ -687,23 +655,9 @@ Compare the drift.
 
 '''
 
-
-<<<<<<< Updated upstream
-#%%
-zthickness = 50
-zrange = range(max(0,estZ-zthickness//2), min(nplane, estZ+zthickness//2))
-
-imgs4reg = np.zeros(outSession.shape)
-imgs4corr = np.zeros(outSession.shape)
-nsession = len(sessionNames)
-=======
-
-
 #%% Calculate session mimg depth estimates
 zthickness = 50
 zrange = range(max(0,estZ-zthickness//2), min(nplane, estZ+zthickness//2))
-
-# outSessionCropped=
 
 imgs4reg = np.zeros(outSession.shape)
 imgs4corr = np.zeros(outSession.shape)
@@ -808,12 +762,10 @@ napari.view_image(np.array(imgs4reg))
 regTransMimg = []
 transMimg = []
 regZstack = []
->>>>>>> Stashed changes
 for si in range(nsession):
     regTransMimg.append(srAf.transform(imgs4reg[si], tmat=bestTforms[si]))
     transMimg.append(srAf.transform(outSession[si,:,:], tmat=bestTforms[si]))
 
-<<<<<<< Updated upstream
 useY = min(imgs4reg.shape[1], zstack4reg.shape[1]-estY)
 useX = min(imgs4reg.shape[2], zstack4reg.shape[2]-estX)
 imgs4regTrim = imgs4reg[:,:useY, :useX].copy()
@@ -837,14 +789,12 @@ ax.legend()
 ax.set_title(f'JK{mouse:03} plane {pn}\nBest correlation values')
 ax.set_ylabel('Correlation')
 ax.set_xlabel('Session index')
-=======
+
 viewer = napari.Viewer()
 viewer.add_image(np.array(regTransMimg))
 viewer.add_image(np.array(transMimg))
 #%%
 
-
->>>>>>> Stashed changes
 
 fig, ax = plt.subplots()
 ax.plot([0, nsession], [estZ, estZ], '--', colors=(0.6, 0.6, 0.6))
@@ -853,7 +803,6 @@ ax.set_title(f'JK{mouse:03} plane {pn}\nBest registered depth')
 ax.set_ylabel(r'Best-matched depth ($\mu$m)')
 ax.set_xlabel('Session index')
 
-<<<<<<< Updated upstream
 #%% Look at the curves in each sesion
 if nsession <19:
     numRow = 3
@@ -916,7 +865,6 @@ for si in selectedSi:
 
 #%%
 #% Total drift across sessions
-=======
 
 '''
 Proceed to within-session z-drift 
@@ -1010,7 +958,7 @@ fig.tight_layout(pad=0.1)
 fig.subplots_adjust(top=0.9, hspace=0.5)
 
 #%% Total drift across sessions
->>>>>>> Stashed changes
+
 fig, ax = plt.subplots()
 maxLength = max(numBinList)
 for i, si in enumerate(selectedSi):
@@ -1019,18 +967,13 @@ for i, si in enumerate(selectedSi):
     if numBin > 1:
         ax.plot([si+bn/10 for bn in range(numBin)], zdrift, 'k-', linewidth = 5)
     elif numBin == 1:
-<<<<<<< Updated upstream
         ax.plot(si, zdrift[0], 'k.', markersize = 10)
-=======
-        ax.plot(si, zdrift, 'k.', markersize=10)
->>>>>>> Stashed changes
     else:
         continue
 ax.set_xlabel('Session index')
 ax.set_ylabel('Estimated depth ($\mu$m)')
 ax.set_title(f'JK{mouse:03} plane {pn}')
 
-<<<<<<< Updated upstream
 #%% Look at max correlation values in each session
 if nsession <19:
     numRow = 3
@@ -1055,8 +998,6 @@ fig.suptitle(f'JK{mouse:03} plane {pn}')
 fig.tight_layout(pad=0.2)
 plt.subplots_adjust(top=0.9, hspace=0.6)
 
-=======
->>>>>>> Stashed changes
 #%% Save the result
 
 zdriftResult = {}
@@ -1076,10 +1017,8 @@ zdriftResult['info']['estX'] = estX
 zdriftResult['info']['estY'] = estY
 zdriftResult['info']['estZ'] = estZ
 zdriftResult['info']['zthickness'] = zthickness
-<<<<<<< Updated upstream
 zdriftResult['info']['selectedSi'] = selectedSi
-=======
->>>>>>> Stashed changes
+
 
 zdriftResult['zstackAvg'] = zstackAvg
 zdriftResult['sessionImgsDivList'] = sessionImgsDivList
@@ -1090,7 +1029,7 @@ zdriftResult['session']['bestTforms'] = bestTforms
 zdriftResult['session']['bestCorrVals'] = bestCorrVals
 zdriftResult['session']['corrVals'] = corrVals
 zdriftResult['session']['tforms'] = tforms
-=======
+
 # zdriftResult['session']['bestTforms'] = bestTforms
 zdriftResult['session']['bestRigidOffsets'] = bestRigidOffsets
 zdriftResult['session']['bestNonrigidOffsets'] = bestNonrigidOffsets
@@ -1099,7 +1038,7 @@ zdriftResult['session']['corrVals'] = corrVals
 # zdriftResult['session']['tforms'] = tforms
 zdriftResult['session']['rigidOffsets'] = rigidOffsets
 zdriftResult['session']['nonrigidOffsets'] = nonrigidOffsets
->>>>>>> Stashed changes
+
 
 zdriftResult['corrDriftList'] = corrDriftList
 zdriftResult['maxCorrList'] = maxCorrList
@@ -1111,20 +1050,11 @@ np.save(savefn, zdriftResult, allow_pickle = True)
 
 
 
-<<<<<<< Updated upstream
-=======
-
-
-
 
 
 
 
 #%% Applying the same transformation of the reference image
-
->>>>>>> Stashed changes
-
-
 
 
 
