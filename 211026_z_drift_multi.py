@@ -434,7 +434,7 @@ absDepthVal = np.flip(zinfo['zstackDepths'])
 #%% First, look at all mean images and select trimming parameters
 # Also, save time-binned images in each session
 
-pn = 1
+pn = 5
 sessionNames = get_session_names(f'{h5Dir}{mouse:03}/plane_{pn}/', mouse, pn)
 
 mimgList = []
@@ -516,10 +516,10 @@ napari.view_image(np.array(mimgList))
 # Rigid and bilinear registration works similarly at this point
 # Rigid seems more reasonable
 
-topMargin = 15 # Could be larger for the bottom-most plane (4 and 8)
-bottomMargin = 371
+topMargin = 12 # Could be larger for the bottom-most plane (4 and 8)
+bottomMargin = 368
 leftMargin = 12
-rightMargin = 667
+rightMargin = 656
 
 trimMimg = np.array([img[topMargin:bottomMargin, leftMargin:rightMargin] for img in mimgList])
 
@@ -551,9 +551,9 @@ outSession = outSessionRigid.copy()
 
 #%% Find x,y,z position of the reference sessions
 
-estZ = 86
-estY = 165
-estX = 135
+estZ = 181
+estY = 153
+estX = 87
 
 
 
@@ -707,7 +707,7 @@ bestCorrVals, bestTforms, corrVals, tforms = corr_match_to_best_z(imgs4reg=imgs4
 # #%%
 # napari.view_image(np.array(outSession))
 
-#%%
+#%
 maxCorrVals = np.amax(corrVals, axis=1)
 bestZsession = np.argmax(bestCorrVals, axis=1) + max(0, estZ-zthickness//2)
 
@@ -758,73 +758,9 @@ fig.subplots_adjust(top=0.9, hspace=0.5)
 
 #%% Check individual session mimg registratino results (best results per session)
 napari.view_image(np.array(imgs4reg))
+
+
 #%%
-regTransMimg = []
-transMimg = []
-regZstack = []
-for si in range(nsession):
-    regTransMimg.append(srAf.transform(imgs4reg[si], tmat=bestTforms[si]))
-    transMimg.append(srAf.transform(outSession[si,:,:], tmat=bestTforms[si]))
-
-useY = min(imgs4reg.shape[1], zstack4reg.shape[1]-estY)
-useX = min(imgs4reg.shape[2], zstack4reg.shape[2]-estX)
-imgs4regTrim = imgs4reg[:,:useY, :useX].copy()
-imgs4corrTrim = imgs4corr[:,:useY, :useX].copy()
-
-zstack4regTrim = zstack4reg[zrange,estY:estY+useY, estX:estX+useX].copy()
-zstack4corrTrim = zstack4corr[zrange,estY:estY+useY, estX:estX+useX].copy()
-srBi = StackReg(StackReg.BILINEAR)
-bestCorrVals, bestTforms, corrVals, tforms = corr_match_to_best_z(imgs4reg=imgs4regTrim, imgs4corr=imgs4corrTrim, 
-                                zstack4reg=zstack4regTrim, zstack4corr=zstack4corrTrim, stackReg = srBi)
-# corrVals, tforms  = corr_match_to_best_z_suite2p(imgs4reg=imgs4regTrim, imgs4corr=imgs4corrTrim, 
-#                                zstack4reg=zstack4regTrim, zstack4corr=zstack4corrTrim, op = op)
-
-maxCorrVals = np.amax(corrVals, axis=1)
-bestZsession = np.argmax(bestCorrVals, axis=1) + max(0, estZ-zthickness//2)
-
-fig, ax = plt.subplots()
-ax.plot(np.amax(bestCorrVals, axis=1), label='max corr')
-ax.plot(maxCorrVals, label='each corr')
-ax.legend()
-ax.set_title(f'JK{mouse:03} plane {pn}\nBest correlation values')
-ax.set_ylabel('Correlation')
-ax.set_xlabel('Session index')
-
-viewer = napari.Viewer()
-viewer.add_image(np.array(regTransMimg))
-viewer.add_image(np.array(transMimg))
-#%%
-
-
-fig, ax = plt.subplots()
-ax.plot([0, nsession], [estZ, estZ], '--', colors=(0.6, 0.6, 0.6))
-ax.plot(bestZsession)
-ax.set_title(f'JK{mouse:03} plane {pn}\nBest registered depth')
-ax.set_ylabel(r'Best-matched depth ($\mu$m)')
-ax.set_xlabel('Session index')
-
-#%% Look at the curves in each sesion
-if nsession <19:
-    numRow = 3
-elif nsession <25:
-    numRow = 4
-else:
-    numRow = 5
-numCol = nsession//numRow + int(np.ceil(numRow/(nsession%numRow)))
-
-fig, ax = plt.subplots(numRow,numCol)
-for si in range(nsession):
-    pxi = si%numCol
-    pyi = si//numCol
-    ax[pyi,pxi].plot(corrVals[si,:])
-    ax[pyi,pxi].set_title(f'Session #{si}')
-
-fig.suptitle(f'JK{mouse:03} plane {pn}')
-#%%
-fig.tight_layout(pad=0.5)
-plt.subplots_adjust(top=0.9, hspace=0.5)
-
-
 
 '''
 Proceed to within-session z-drift 
@@ -833,47 +769,7 @@ For now, (comparing between plane 1 and plane 4)
 select good session and proceed.
 '''
 #%% Within-session z-drift
-selectedSi = [i for i in range(nsession)]
-
-maxCorrList = []
-corrDriftList = []
-zdriftList = []
-zflatten = np.array([img.flatten() for img in zstack4corrTrim])
-for si in selectedSi:
-    corrSession = np.zeros((numBinList[si],zthickness))
-    maxCorrSession = np.zeros(numBinList[si])
-    zdrift = np.zeros(numBinList[si])
-    # if numBinList[si] > 3: # only for sessions longer than 30 min
-    sessionImgs = [srRigid.transform(img[topMargin:bottomMargin, leftMargin:rightMargin],
-                                       tmat = tformSessionRigid[si,:,:]) for img in sessionImgsDivList[si]]
-    sessionImgArrTmp = np.array([outSession[si,:,:], *sessionImgs])
-    sessionImgArrReged = srRigid.register_transform_stack(sessionImgArrTmp, reference='first')
-    sessionImgArr = sessionImgArrReged[1:,:useY,:useX]
-    for bi in range(numBinList[si]):
-        binImg = sessionImgArr[bi,:,:].copy()
-        binImgReged = srBi.transform(binImg, tmat = bestTforms[si])
-        binImgCorr = clahe_each(binImgReged, kernel_size = corrKernel)
-        corrValTmp = np.corrcoef(binImgCorr.flatten(), zflatten)[0,1:]
-        corrSession[bi,:] = corrValTmp
-    maxCorrSession = np.amax(corrSession, axis=1)
-    zdrift = np.argmax(corrSession, axis=1)
-    maxCorrList.append(maxCorrSession)
-    corrDriftList.append(corrSession)
-    zdriftList.append(zdrift)
-
-
-
-#%%
-#% Total drift across sessions
-
-'''
-Proceed to within-session z-drift 
-only if registration works well.
-For now, (comparing between plane 1 and plane 4)
-select good session and proceed.
-'''
-#%% Within-session z-drift
-selectedSi = [i for i in range(nsession)]
+selectedSi = [*range(nsession)]
 
 maxCorrList = []
 corrDriftList = []
@@ -904,35 +800,35 @@ for si in selectedSi:
     zdriftList.append(zdrift)
 
 #%% Within-session z-drift using suite2p
-selectedSi = [i for i in range(nsession)]
+# selectedSi = [*range(nsession)]
 
-maxCorrList = []
-corrDriftList = []
-zdriftList = []
-zflatten = np.array([img.flatten() for img in zstackTrim])
-for si in selectedSi:
-    corrSession = np.zeros((numBinList[si],len(zrange)))
-    maxCorrSession = np.zeros(numBinList[si])
-    zdrift = np.zeros(numBinList[si])
-    # if numBinList[si] > 3: # only for sessions longer than 30 min
+# maxCorrList = []
+# corrDriftList = []
+# zdriftList = []
+# zflatten = np.array([img.flatten() for img in zstackTrim])
+# for si in selectedSi:
+#     corrSession = np.zeros((numBinList[si],len(zrange)))
+#     maxCorrSession = np.zeros(numBinList[si])
+#     zdrift = np.zeros(numBinList[si])
+#     # if numBinList[si] > 3: # only for sessions longer than 30 min
 
-    sessionImgs = [srRigid.transform(img[topMargin:bottomMargin, leftMargin:rightMargin],
-                                       tmat = tformSessionRigid[si,:,:]) for img in sessionImgsDivList[si]]
-    sessionImgArrTmp = np.array([outSession[si,:,:], *sessionImgs])
-    sessionImgArrReged = srRigid.register_transform_stack(sessionImgArrTmp, reference='first')
-    sessionImgArr = sessionImgArrReged[1:,:useY,:useX]
+#     sessionImgs = [srRigid.transform(img[topMargin:bottomMargin, leftMargin:rightMargin],
+#                                        tmat = tformSessionRigid[si,:,:]) for img in sessionImgsDivList[si]]
+#     sessionImgArrTmp = np.array([outSession[si,:,:], *sessionImgs])
+#     sessionImgArrReged = srRigid.register_transform_stack(sessionImgArrTmp, reference='first')
+#     sessionImgArr = sessionImgArrReged[1:,:useY,:useX]
 
-    for bi in range(numBinList[si]):
-        binImg = sessionImgArr[bi,:,:].copy()
-        binImgReged = s2p_register(binImg, op, rigid_offsets=bestRigidOffsets[si], nonrigid_offsets=bestNonrigidOffsets[si])
-        corrValTmp = np.corrcoef(binImgReged.flatten(), zflatten)[0,1:]
-        corrSession[bi,:] = corrValTmp
-    maxCorrSession = np.amax(corrSession, axis=1)
-    zdrift = np.argmax(corrSession, axis=1)
+#     for bi in range(numBinList[si]):
+#         binImg = sessionImgArr[bi,:,:].copy()
+#         binImgReged = s2p_register(binImg, op, rigid_offsets=bestRigidOffsets[si], nonrigid_offsets=bestNonrigidOffsets[si])
+#         corrValTmp = np.corrcoef(binImgReged.flatten(), zflatten)[0,1:]
+#         corrSession[bi,:] = corrValTmp
+#     maxCorrSession = np.amax(corrSession, axis=1)
+#     zdrift = np.argmax(corrSession, axis=1)
 
-    maxCorrList.append(maxCorrSession)
-    corrDriftList.append(corrSession)
-    zdriftList.append(zdrift)
+#     maxCorrList.append(maxCorrSession)
+#     corrDriftList.append(corrSession)
+#     zdriftList.append(zdrift)
 
 #%% Look at max correlation values in each session
 if nsession < 19:
@@ -946,7 +842,7 @@ if nsession%numRow>0:
 else:
     numCol = nsession//numRow
 
-fig, ax = plt.subplots(numRow,numCol)
+fig, ax = plt.subplots(numRow,numCol,figsize=(13,10))
 for i, si in enumerate(selectedSi):
     pxi = si%numCol
     pyi = si//numCol
@@ -957,7 +853,7 @@ fig.suptitle(f'JK{mouse:03} plane {pn}')
 fig.tight_layout(pad=0.1)
 fig.subplots_adjust(top=0.9, hspace=0.5)
 
-#%% Total drift across sessions
+#% Total drift across sessions
 
 fig, ax = plt.subplots()
 maxLength = max(numBinList)
@@ -973,30 +869,6 @@ for i, si in enumerate(selectedSi):
 ax.set_xlabel('Session index')
 ax.set_ylabel('Estimated depth ($\mu$m)')
 ax.set_title(f'JK{mouse:03} plane {pn}')
-
-#%% Look at max correlation values in each session
-if nsession <19:
-    numRow = 3
-elif nsession <25:
-    numRow = 4
-else:
-    numRow = 5
-    
-if nsession % numRow > 0:
-    numCol = nsession//numRow + 1
-else:
-    numCol = nsession//numRow
-fig, ax = plt.subplots(numRow,numCol)
-for i, si in enumerate(selectedSi):
-    pxi = si%numCol
-    pyi = si//numCol
-    for bi in range(numBinList[si]):
-        ax[pyi,pxi].plot(corrDriftList[i][bi,:])
-    ax[pyi,pxi].set_title(f'Session #{si}')
-fig.suptitle(f'JK{mouse:03} plane {pn}')
-#%%
-fig.tight_layout(pad=0.2)
-plt.subplots_adjust(top=0.9, hspace=0.6)
 
 #%% Save the result
 
@@ -1024,20 +896,15 @@ zdriftResult['zstackAvg'] = zstackAvg
 zdriftResult['sessionImgsDivList'] = sessionImgsDivList
 
 zdriftResult['session'] = {}
-<<<<<<< Updated upstream
+
 zdriftResult['session']['bestTforms'] = bestTforms
+# zdriftResult['session']['bestRigidOffsets'] = bestRigidOffsets
+# zdriftResult['session']['bestNonrigidOffsets'] = bestNonrigidOffsets
 zdriftResult['session']['bestCorrVals'] = bestCorrVals
 zdriftResult['session']['corrVals'] = corrVals
 zdriftResult['session']['tforms'] = tforms
-
-# zdriftResult['session']['bestTforms'] = bestTforms
-zdriftResult['session']['bestRigidOffsets'] = bestRigidOffsets
-zdriftResult['session']['bestNonrigidOffsets'] = bestNonrigidOffsets
-zdriftResult['session']['bestCorrVals'] = bestCorrVals
-zdriftResult['session']['corrVals'] = corrVals
-# zdriftResult['session']['tforms'] = tforms
-zdriftResult['session']['rigidOffsets'] = rigidOffsets
-zdriftResult['session']['nonrigidOffsets'] = nonrigidOffsets
+# zdriftResult['session']['rigidOffsets'] = rigidOffsets
+# zdriftResult['session']['nonrigidOffsets'] = nonrigidOffsets
 
 
 zdriftResult['corrDriftList'] = corrDriftList
