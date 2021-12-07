@@ -9,6 +9,12 @@ Then, around the peak value y, try y-0.05:y+0.05:0.05.
 With 9 iterations, get 0.05 resolution of threshold
 
 2021/07/24 JK
+
+Updates: 
+    2021/12/07 JK
+        Need to apply auto_pre_cur updated version (After 2021/10/01)
+        Run each session is stat.npy does not exist, 
+        or stat.npy made before 2021/10/01
 """
 
 import numpy as np
@@ -16,6 +22,7 @@ from suite2p.run_s2p import run_s2p, default_ops
 import os, glob, shutil
 from auto_pre_cur import auto_pre_cur
 import matplotlib.pyplot as plt
+import time
 
 import gc
 gc.enable()
@@ -139,11 +146,27 @@ for mi in [0]:
                 
             # Check if ROI param search was done in this folder
             # (# of thxxx folder == 9) & (isfile, F.npy, Fnew.npy, iscell.npy, spks.npy, stat.npy)
+            # Updated: 2021/12/07
+            # Run if no stat.npy or stat.npy made < 2021/10/01
+            runFlag = 0
+            
             tempDir = os.path.join(planeDir, f'{sn}/plane0/')
-            ls = os.listdir(tempDir)
-            tempThLen = sum([os.path.isdir(os.path.join(tempDir, lstr)) for lstr in ls])
-            tempResultLen = len([b for b in fnresults if b in ls])
-            if not ((tempThLen == thFolderLen) & (tempResultLen == len(fnresults))): # this folder is not done yet
+            # ls = os.listdir(tempDir)
+            # tempThLen = sum([os.path.isdir(os.path.join(tempDir, lstr)) for lstr in ls])
+            # tempResultLen = len([b for b in fnresults if b in ls])
+            statFn = f'{tempDir}stat.npy'
+            if not os.path.isfile(statFn):
+                runFlag = 1
+            else: 
+                statTimestamp = os.path.getmtime(statFn)
+                dateString = '10/01/2021'
+                date = datetime.datetime.strptime(dateString, '%m/%d/%Y')            
+                timestamp = datetime.datetime.timestamp(date)            
+                if statTimestamp < timestamp: # this folder is done before Oct 2021
+                    runFlag = 1
+            # if not ((tempThLen == thFolderLen) & (tempResultLen == len(fnresults))) # this folder is not done yet 
+            if runFlag:
+                print(f'Running session {sn} plane {pn}')
                 # Check for registration. If not, run registration
                 if not (os.path.isfile(f'{tempDir}ops.npy') & os.path.isfile(f'{tempDir}data.bin')):
                     db = {'h5py': sftemp,
