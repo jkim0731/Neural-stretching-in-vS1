@@ -64,8 +64,8 @@ ops['look_one_level_down'] = False
 ops['save_mat'] = False
 ops['save_NWB'] = False # for now. Need to set up parameters and confirm it works
 
-thFolderLen = 9 # to test done folders
-fnresults = ['F.npy', 'Fneu.npy', 'iscell.npy', 'spks.npy', 'stat.npy', 'data.bin', 'ops.npy'] # to test done folders
+# thFolderLen = 9 # to test done folders
+# fnresults = ['F.npy', 'Fneu.npy', 'iscell.npy', 'spks.npy', 'stat.npy', 'data.bin', 'ops.npy'] # to test done folders
 
 ops = default_ops()
 ops['tau'] = 1.5
@@ -82,7 +82,7 @@ ops['nbinned']: 10000  # max number of binned frames for cell detection
 ops['max_overlap'] = 0.75  # cells with more overlap than this get removed during triage, before refinement
 ops['allow_overlap'] = False
 #%%
-for mi in [0]:
+for mi in [8]:
 # for mi in [8]:
     mouse = mice[mi]
     ops['fs'] = freq[mi]

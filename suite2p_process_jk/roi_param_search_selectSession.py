@@ -18,30 +18,31 @@ Updates:
     Modify roi_detection function
     2021/10/06 JK
 """
-removingSessions = {'025Upper': ['014', '016', '017','018','024','025','5555_001','5555_004','5555_014','5555_103','9999_1', '9999_2'],
-                    '025Lower': ['011', '012', '016','025','5554_001','5554_003','5554_012','5554_013','5554_103','9998_1', '9998_2'],
-                    '027Upper': [],
-                    '027Lower': [],
-                    '030Upper': [],
-                    '030Lower': [],
-                    '036Upper': [],
-                    '036Lower': [],
-                    '037Upper': [],
-                    '037Lower': [],
-                    '038Upper': [],
-                    '038Lower': [],
-                    '039Upper': [],
-                    '039Lower': [],
-                    '041Upper': [],
-                    '041Lower': [],
-                    '052Upper': [],
-                    '052Lower': [],
-                    '053Upper': [],
-                    '053Lower': [],
-                    '054Upper': [],
-                    '054Lower': [],
-                    '056Upper': [],
-                    '056Lower': [],}
+# removingSessions = {'025Upper': ['014', '016', '017','018','024','025','5555_001','5555_004','5555_014','5555_103','9999_1', '9999_2'],
+#                     '025Lower': ['011', '012', '016','025','5554_001','5554_003','5554_012','5554_013','5554_103','9998_1', '9998_2'],
+#                     '027Upper': [],
+#                     '027Lower': [],
+#                     '030Upper': [],
+#                     '030Lower': [],
+#                     '036Upper': [],
+#                     '036Lower': [],
+#                     '037Upper': [],
+#                     '037Lower': [],
+#                     '038Upper': [],
+#                     '038Lower': [],
+#                     '039Upper': [],
+#                     '039Lower': [],
+#                     '041Upper': [],
+#                     '041Lower': [],
+#                     '052Upper': [],
+#                     '052Lower': [],
+#                     '053Upper': [],
+#                     '053Lower': [],
+#                     '054Upper': [],
+#                     '054Lower': [],
+#                     '056Upper': [],
+#                     '056Lower': [],}
+selectSessions = ['002']
 
 import numpy as np
 from suite2p.run_s2p import run_s2p, default_ops
@@ -114,7 +115,8 @@ for mi in [0]:
     ops['zoom'] = zoom[mi]
     ops['umPerPix'] = 1.4/ops['zoom']
 
-    for pn in range(1,9):
+    # for pn in range(1,9):
+    for pn in range(1,2):    
         mouseDir = f'{h5Dir}{mouse:03}/'
         planeDir = f'{mouseDir}plane_{pn}/'
         tempFnList = glob.glob(f'{planeDir}{mouse:03}_*_plane_{pn}.h5')
@@ -170,7 +172,8 @@ for mi in [0]:
             else:
                 sn = sntemp.split('_')[1]
             
-            if sn not in removingSessions[volumeName]:
+            # if sn not in removingSessions[volumeName]:
+            if sn in selectSessions:
                 tempDir = os.path.join(planeDir, f'{sn}/plane0/')
                 ls = os.listdir(tempDir)
                 # Check for registration. If not, run registration
