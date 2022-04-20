@@ -23,6 +23,7 @@ import os, glob, shutil
 from auto_pre_cur import auto_pre_cur
 import matplotlib.pyplot as plt
 import time
+import datetime
 
 import gc
 gc.enable()
@@ -82,14 +83,15 @@ ops['nbinned']: 10000  # max number of binned frames for cell detection
 ops['max_overlap'] = 0.75  # cells with more overlap than this get removed during triage, before refinement
 ops['allow_overlap'] = False
 #%%
+# for mi in [1,2]:
 for mi in [8]:
-# for mi in [8]:
     mouse = mice[mi]
     ops['fs'] = freq[mi]
     ops['zoom'] = zoom[mi]
     ops['umPerPix'] = 1.4/ops['zoom']
 
-    for pn in range(1,9):
+    # for pn in range(1,9):
+    for pn in range(2,9):
         mouseDir = f'{h5Dir}{mouse:03}/'
         planeDir = f'{mouseDir}plane_{pn}/'
         tempFnList = glob.glob(f'{planeDir}{mouse:03}_*_plane_{pn}.h5')

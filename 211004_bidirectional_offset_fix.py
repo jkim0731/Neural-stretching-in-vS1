@@ -181,13 +181,13 @@ for pn in range(1,9):
 #                     8: [6, 7, 10, 11, 12, 14, 18, 19, 26, 29, 30, 32]}
 
 errorSessionInds = {1: [],
-                    2: [3, 26, 30, 32],
-                    3: [1, 3, 26, 30, 32],
-                    4: [1, 3, 26, 30, 32],
-                    5: [1, 3, 26, 29, 30, 32],
-                    6: [7, 26, 29, 30, 32],
-                    7: [1, 2, 3, 14, 26, 29, 32],
-                    8: [6, 7, 10, 11, 12, 14, 18, 19, 26, 29, 30, 32]}
+                    2: [],
+                    3: [],
+                    4: [],
+                    5: [],
+                    6: [29],
+                    7: [29],
+                    8: [29]}
 
 # #%% check ref images
 # viewer = napari.Viewer()
@@ -285,7 +285,8 @@ for pn in range(1,9):
 
 #%% Check again if the issue is fixed
 viewer = napari.Viewer()
-for pn in range(1,9):
+# for pn in range(1,9):
+for pn in [6,7,8]:    
     planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
     sessionNames = get_session_names(planeDir, mouse, pn)
     mimgList = []
@@ -295,6 +296,20 @@ for pn in range(1,9):
         mimgList.append(ops['meanImg'])
     viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn}')
 
+#%% Compare with the backup
+
+# viewer = napari.Viewer()
+# # for pn in range(1,9):
+# for pn in [6,7,8]:    
+#     planeDir = f'{baseDir}{mouse:03}/plane_{pn}/'
+#     sessionNames = get_session_names(planeDir, mouse, pn)
+#     mimgList = []
+#     for ei in errorSessionInds[pn]:
+#         sname = sessionNames[ei][4:]
+#         ops = np.load(f'{planeDir}{sname}/plane0/backup/ops.npy', allow_pickle=True).item()
+#         mimgList.append(ops['meanImg'])
+#     viewer.add_image(np.array(mimgList), visible=False, name=f'plane {pn} backup')
+    
 #%%
 # pn = 3
 # sname = '002'

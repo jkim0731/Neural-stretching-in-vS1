@@ -39,14 +39,41 @@ gc.enable()
 h5Dir = 'D:/TPM/JK/h5/'
 
 mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
-refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
+refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      21,      3,      3,      3]
+
+def twostep_register(img, rigid_y1, rigid_x1, nonrigid_y1, nonrigid_x1, block_size1, 
+                     rigid_y2, rigid_x2, nonrigid_y2, nonrigid_x2, block_size2):
+    frames = img.copy().astype(np.float32)
+    if len(frames.shape) == 2:
+        frames = np.expand_dims(frames, axis=0)
+    elif len(frames.shape) < 2:
+        raise('Dimension of the frames should be at least 2')
+    elif len(frames.shape) > 3:
+        raise('Dimension of the frames should be at most 3')
+    (Ly, Lx) = frames.shape[1:]
+    # 1st rigid shift
+    frames = np.roll(frames, (-rigid_y1, -rigid_x1), axis=(1,2))
+    # 1st nonrigid shift
+    yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=block_size1)
+    ymax1 = np.tile(nonrigid_y1, (frames.shape[0],1))
+    xmax1 = np.tile(nonrigid_x1, (frames.shape[0],1))
+    frames = nonrigid.transform_data(data=frames, nblocks=nblocks, 
+        xblock=xblock, yblock=yblock, ymax1=ymax1, xmax1=xmax1)
+    # 2nd rigid shift
+    frames = np.roll(frames, (-rigid_y2, -rigid_x2), axis=(1,2))
+    # 2nd nonrigid shift            
+    yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=block_size2)
+    ymax1 = np.tile(nonrigid_y2, (frames.shape[0],1))
+    xmax1 = np.tile(nonrigid_x2, (frames.shape[0],1))
+    frames = nonrigid.transform_data(data=frames, nblocks=nblocks, 
+        xblock=xblock, yblock=yblock, ymax1=ymax1, xmax1=xmax1)
+    return frames
 
 # CLAHE each mean images
 def clahe_each(img: np.float64, kernel_size = None, clip_limit = 0.01, nbins = 2**16):
     newimg = (img - np.amin(img)) / (np.amax(img) - np.amin(img))
     newimg = exposure.equalize_adapthist(newimg, kernel_size = kernel_size, clip_limit = clip_limit, nbins=nbins)    
     return newimg
-
 
 def s2p_nonrigid_registration(mimgList, refImg, op):
     ### ------------- compute registration masks ----------------- ###
@@ -264,8 +291,7 @@ op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P reco
 op['maxregshift'] = 0.3
 op['smooth_sigma_time'] = 0
 
-# for mi in [1,4]:
-for mi in [0,3,8]:    
+for mi in [6]:
     mouse = mice[mi]
     refSession = refSessions[mi]
     
@@ -333,11 +359,11 @@ op['maxregshiftNR'] = 15
 op['snr_thresh'] = 1.2
 # op['block_size'] = [128, 128]
 # for mi in [1,4]:
-for mi in [0,3,8]:
+for mi in [8]:
     mouse = mice[mi]
     refSession = refSessions[mi]
     for pn in range(1,9):
-    # for pn in range(5,9):
+    # for pn in range(1,2):
         print(f'Processing JK{mouse:03} plane {pn}')
         planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
         refDir = f'{planeDir}{refSession:03}/plane0/'
@@ -420,302 +446,350 @@ for mi in [0,3,8]:
 
 
 
+#%% Testing the result (2022/02/28)
 
-
-#%% Testing if the registration offsets are correct
-# And also how to apply them
-# 2021/09/08
-mi = 0
-mouse = mice[mi]
-pn = 1
-planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
-regOps = np.load(f'{planeDir}s2p_nr_reg.npy', allow_pickle=True).item()
-if 'block_size1' not in regOps:
-    regOps['block_size1'] = [128,128]
-    regOps['block_size2'] = [32,32]
-    regOps['maxregshiftNR1'] = 12
-    regOps['maxregshiftNR2'] = 3
-    
-si = 5
-tempSn = regOps['sessionNames'][si]
-# tempSn = tempSn[4:-1] if tempSn[-1]=='_' else tempSn[4:]
-tempDir = f'{planeDir}{tempSn}/plane0/'
-ops = np.load(f'{tempDir}ops.npy', allow_pickle=True).item()
-tempImg = ops['meanImg'].astype(np.float32)
-regImg = regOps['regImgs'][si,:,:]
-
-(Ly, Lx) = regOps['regImgs'].shape[1:]
-rigid_y1 = regOps['rigid_offsets_1st'][0][0][si]
-rigid_x1 = regOps['rigid_offsets_1st'][0][1][si]
-nonrigid_y1 = regOps['nonrigid_offsets_1st'][0][0][si,:]
-nonrigid_x1 = regOps['nonrigid_offsets_1st'][0][1][si,:]
-rigid_y2 = regOps['rigid_offsets_2nd'][0][0][si]
-rigid_x2 = regOps['rigid_offsets_2nd'][0][1][si]
-nonrigid_y2 = regOps['nonrigid_offsets_2nd'][0][0][si,:]
-nonrigid_x2 = regOps['nonrigid_offsets_2nd'][0][1][si,:]
-
-frames = np.expand_dims(tempImg, axis=0)
-# Apply 2-step registration
-# 1st rigid shift
-frames = rigid.shift_frame(frame=frames, dy=rigid_y1, dx=rigid_x1)
-# 1st nonrigid shift
-yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=regOps['block_size1'])
-ymax1 = np.tile(nonrigid_y1, (frames.shape[0],1))
-xmax1 = np.tile(nonrigid_x1, (frames.shape[0],1))
-frames = nonrigid.transform_data(
-    data=frames,
-    nblocks=nblocks,
-    xblock=xblock,
-    yblock=yblock,
-    ymax1=ymax1,
-    xmax1=xmax1,
-)
-# 2nd rigid shift
-frames = rigid.shift_frame(frame=frames, dy=rigid_y2, dx=rigid_x2)
-# 2nd nonrigid shift
-yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=regOps['block_size2'])
-ymax1 = np.tile(nonrigid_y2, (frames.shape[0],1))
-xmax1 = np.tile(nonrigid_x2, (frames.shape[0],1))
-frames = nonrigid.transform_data(
-    data=frames,
-    nblocks=nblocks,
-    xblock=xblock,
-    yblock=yblock,
-    ymax1=ymax1,
-    xmax1=xmax1,
-)
-
-# show the result
-testImg = frames.squeeze()
-napari.view_image(np.array([regImg, testImg]))
-#%%
-napari.view_image(np.array([ops['meanImg'],tempImg]))
-
-'''
-It does not match. How come?
-'''
-#%%
-op = {}
-op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P recordings
-op['maxregshift'] = 0.3
-op['smooth_sigma_time'] = 0
-op['maxregshiftNR'] = 15
-op['snr_thresh'] = 1.2
-
-refSession = refSessions[mi]
-refDir = f'{planeDir}{refSession:03}/plane0/'
-ops = np.load(f'{refDir}ops.npy', allow_pickle=True).item()
-refImg = ops['meanImg'].astype(np.float32)
-
-frames = np.expand_dims(tempImg, axis=0)
-
-
-op['block_size'] = [128,128]
-op['maxregshiftNR'] = 12
-_, frames, rigid_offsets_1st, nonrigid_offsets_1st = s2p_nonrigid_registration(frames, refImg, op)
-# 2nd pass
-op['block_size'] = [32,32]
-op['maxregshiftNR'] = 3
-_, frames, rigid_offsets_2nd, nonrigid_offsets_2nd = s2p_nonrigid_registration(frames, refImg, op)
-
-testImg = frames.squeeze()
-# napari.view_image(np.array([regImg, testImg]))
-
-
-#%%
-op = {}
-op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P recordings
-op['maxregshift'] = 0.3
-op['smooth_sigma_time'] = 0
-op['maxregshiftNR'] = 15
-op['snr_thresh'] = 1.2
-
-refSession = refSessions[mi]
-refDir = f'{planeDir}{refSession:03}/plane0/'
-ops = np.load(f'{refDir}ops.npy', allow_pickle=True).item()
-refImg = ops['meanImg'].astype(np.float32)
-
-si = 5
-tempSn = regOps['sessionNames'][si][4:]
-tempDir = f'{planeDir}{tempSn}/plane0/'
-ops = np.load(f'{tempDir}ops.npy', allow_pickle=True).item()
-tempImg = ops['meanImg'].astype(np.float32)
-regImg = regOps['regImgs'][si,:,:]
-
-frames = np.expand_dims(tempImg, axis=0)
-
-
-op['block_size'] = [128,128]
-op['maxregshiftNR'] = 12
-frames1, frames2, rigid_offsets_1st, nonrigid_offsets_1st = s2p_nonrigid_registration(frames, refImg, op)
-# 2nd pass
-op['block_size'] = [32,32]
-op['maxregshiftNR'] = 3
-frames3, frames4, rigid_offsets_2nd, nonrigid_offsets_2nd = s2p_nonrigid_registration(frames2, refImg, op)
-
-ttestImg = frames4.squeeze()
-
-
-
-rigid_y1 = rigid_offsets_1st[0][0]
-rigid_x1 = rigid_offsets_1st[0][1]
-nonrigid_y1 = nonrigid_offsets_1st[0][0]
-nonrigid_x1 = nonrigid_offsets_1st[0][1]
-rigid_y2 = rigid_offsets_2nd[0][0]
-rigid_x2 = rigid_offsets_2nd[0][1]
-nonrigid_y2 = nonrigid_offsets_2nd[0][0]
-nonrigid_x2 = nonrigid_offsets_2nd[0][1]
-
-
-
-testFrames = np.expand_dims(tempImg, axis=0)
-# Apply 2-step registration
-# 1st rigid shift
-testFrames1 = testFrames.copy()
-for (fr, dy, dx) in zip(testFrames1, rigid_y1, rigid_x1):
-    fr[:] = rigid.shift_frame(frame=fr, dy=dy, dx=dx)
-
-# 1st nonrigid shift
-yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size1']))
-ymax1 = np.tile(nonrigid_y1, (testFrames1.shape[0],1))
-xmax1 = np.tile(nonrigid_x1, (testFrames1.shape[0],1))
-testFrames2 = nonrigid.transform_data(
-    data=testFrames1,
-    nblocks=nblocks,
-    xblock=xblock,
-    yblock=yblock,
-    ymax1=ymax1,
-    xmax1=xmax1,
-)
-# 2nd rigid shift
-testFrames3 = testFrames2.copy()
-for (fr, dy, dx) in zip(testFrames3, rigid_y2, rigid_x2):
-    fr[:] = rigid.shift_frame(frame=fr, dy=dy, dx=dx)
-# 2nd nonrigid shift
-yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size2']))
-ymax1 = np.tile(nonrigid_y2, (frames3.shape[0],1))
-xmax1 = np.tile(nonrigid_x2, (frames3.shape[0],1))
-testFrames4 = nonrigid.transform_data(
-    data=testFrames3,
-    nblocks=nblocks,
-    xblock=xblock,
-    yblock=yblock,
-    ymax1=ymax1,
-    xmax1=xmax1,
-)
-
-testRegImg = testFrames4.squeeze()
-
-
-
-
-
-# 1st rigid shift
-ttestFrames1 = tempImg.copy()
-ttestFrames1 = rigid.shift_frame(frame=ttestFrames1, dy = rigid_y1[0], dx = rigid_x1[0])
-# 1st nonrigid shift
-yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size1']))
-ymax1 = np.tile(nonrigid_y1, (testFrames1.shape[0],1))
-xmax1 = np.tile(nonrigid_x1, (testFrames1.shape[0],1))
-ttestFrames2 = nonrigid.transform_data(
-    data=np.expand_dims(ttestFrames1, axis=0),
-    nblocks=nblocks,
-    xblock=xblock,
-    yblock=yblock,
-    ymax1=ymax1,
-    xmax1=xmax1,
-)
-# 2nd rigid shift
-ttestFrames3 = ttestFrames2[0,:,:].copy()
-ttestFrames3 = rigid.shift_frame(frame=ttestFrames3, dy = rigid_y2[0], dx = rigid_x2[0])
-# 2nd nonrigid shift
-yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size2']))
-ymax1 = np.tile(nonrigid_y2, (frames3.shape[0],1))
-xmax1 = np.tile(nonrigid_x2, (frames3.shape[0],1))
-ttestFrames4 = nonrigid.transform_data(
-    data=np.expand_dims(ttestFrames3, axis=0),
-    nblocks=nblocks,
-    xblock=xblock,
-    yblock=yblock,
-    ymax1=ymax1,
-    xmax1=xmax1,
-)
-
-ttestRegImg = ttestFrames4.squeeze()
-
-
-napari.view_image(np.array([regImg, testImg, ttestImg, testRegImg, ttestRegImg]))
-
-
-
-
-
-#%%
-# 1st rigid shift
-ff = tempImg.copy()
-ff = rigid.shift_frame(frame=ff, dy = rigid_y1[0], dx = rigid_x1[0])
-ff = np.expand_dims(ff, axis=0)
-# 1st nonrigid shift
-yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size1']))
-ymax1 = np.tile(nonrigid_y1, (ff.shape[0],1))
-xmax1 = np.tile(nonrigid_x1, (ff.shape[0],1))
-ff = nonrigid.transform_data(
-    data=ff,
-    nblocks=nblocks,
-    xblock=xblock,
-    yblock=yblock,
-    ymax1=ymax1,
-    xmax1=xmax1,
-)
-
-# 2nd rigid shift
-ff = ff.squeeze()
-ff = rigid.shift_frame(frame=ff, dy = rigid_y2[0], dx = rigid_x2[0])
-ff = np.expand_dims(ff,axis=0)
-# 2nd nonrigid shift
-yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=regOps['block_size2'])
-ymax1 = np.tile(nonrigid_y2, (ff.shape[0],1))
-xmax1 = np.tile(nonrigid_x2, (ff.shape[0],1))
-ff = nonrigid.transform_data(
-    data=ff,
-    nblocks=nblocks,
-    xblock=xblock,
-    yblock=yblock,
-    ymax1=ymax1,
-    xmax1=xmax1,
-)
-
-ff = ff.squeeze()
-
-
-
-napari.view_image(np.array([regImg, testImg, testRegImg, ttestRegImg, ff, tempImg]))
-
-#%% show the result
 viewer = napari.Viewer()
-viewer.add_image(np.vstack((frames1, testFrames1)), name='1st rigid')
-viewer.add_image(np.vstack((frames2, testFrames2)), name='1st nonrigid')
-viewer.add_image(np.vstack((frames3, testFrames3)), name='2nd rigid')
-viewer.add_image(np.vstack((frames4, testFrames4)), name='2nd nonrigid')
 
+pn = 2
+planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+regFn = f'{planeDir}s2p_nr_reg.npy'
+reg = np.load(regFn, allow_pickle=True).item()
+block_size1 = reg['block_size1']
+block_size2 = reg['block_size2']
 
-#%%
-testFrames1 = testFrames.copy()
-testFrames11 = testFrames.copy()
-for (fr, dy, dx) in zip(testFrames1, rigid_y1, rigid_x1):
-    fr[:] = rigid.shift_frame(frame=fr, dy=dy, dx=dx)
-testFrames11 = rigid.shift_frame(frame=testFrames11[0,:,:], dy = rigid_y1[0], dx = rigid_x1[0])
-testFrames11 = np.expand_dims(testFrames11, axis=0)
-if dy == rigid_y1[0]:
-    print('Same dy')
-else:
-    print('Different dy')
-if dx == rigid_x1[0]:
-    print('Same dx')
-else:
-    print('Different dy')
+regImgs = np.array(reg['regImgs'])
+viewer.add_image(regImgs, name=f'plane {pn}')
+
+transMimgs = []
+# transBlended = []
+sessionNames = [sn[4:] for sn in reg['sessionNames']]
+           
+for si, sn in enumerate(sessionNames):
+    tempOps = np.load(f'{planeDir}{sn}/plane0/ops.npy', allow_pickle=True).item()
+    mimg = tempOps['meanImg']
     
-a = testFrames11-testFrames1
+    rigid_y1 = reg['rigid_offsets_1st'][0][0][si]
+    rigid_x1 = reg['rigid_offsets_1st'][0][1][si]
+    nonrigid_y1 = reg['nonrigid_offsets_1st'][0][0][si,:]
+    nonrigid_x1 = reg['nonrigid_offsets_1st'][0][1][si,:]
+    
+    rigid_y2 = reg['rigid_offsets_2nd'][0][0][si]
+    rigid_x2 = reg['rigid_offsets_2nd'][0][1][si]
+    nonrigid_y2 = reg['nonrigid_offsets_2nd'][0][0][si,:]
+    nonrigid_x2 = reg['nonrigid_offsets_2nd'][0][1][si,:]
+    
+    tempTransformed = twostep_register(mimg, rigid_y1, rigid_x1, nonrigid_y1, nonrigid_x1, block_size1, 
+                         rigid_y2, rigid_x2, nonrigid_y2, nonrigid_x2, block_size2)
+    transMimgs.append(tempTransformed)
+    # tempBlend = imblend_for_napari(regImgs[ssi,:,:], np.squeeze(tempTransformed))
+    # transBlended.append(np.squeeze(tempBlend[-1,:,:]))
+viewer.add_image(np.squeeze(np.array(transMimgs)), name='Transformed')
+
+#% Calculating pixel intensity correlation
+numSession = len(sessionNames)
+picorr = np.zeros(numSession)
+for si in range(numSession):
+    picorr[si] = np.corrcoef(regImgs[si,:,:].flatten(), transMimgs[si].flatten())[0,1]
+
+fig, ax = plt.subplots()
+ax.plot(picorr)
+
+
+
+# #%% Testing if the registration offsets are correct
+# # And also how to apply them
+# # 2021/09/08
+# mi = 0
+# mouse = mice[mi]
+# pn = 1
+# planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
+# regOps = np.load(f'{planeDir}s2p_nr_reg.npy', allow_pickle=True).item()
+# if 'block_size1' not in regOps:
+#     regOps['block_size1'] = [128,128]
+#     regOps['block_size2'] = [32,32]
+#     regOps['maxregshiftNR1'] = 12
+#     regOps['maxregshiftNR2'] = 3
+    
+# si = 1
+# tempSn = regOps['sessionNames'][si]
+# tempSn = tempSn[4:-1] if tempSn[-1]=='_' else tempSn[4:]
+# tempDir = f'{planeDir}{tempSn}/plane0/'
+# ops = np.load(f'{tempDir}ops.npy', allow_pickle=True).item()
+# tempImg = ops['meanImg'].astype(np.float32)
+# regImg = regOps['regImgs'][si,:,:]
+
+# (Ly, Lx) = regOps['regImgs'].shape[1:]
+# rigid_y1 = regOps['rigid_offsets_1st'][0][0][si]
+# rigid_x1 = regOps['rigid_offsets_1st'][0][1][si]
+# nonrigid_y1 = regOps['nonrigid_offsets_1st'][0][0][si,:]
+# nonrigid_x1 = regOps['nonrigid_offsets_1st'][0][1][si,:]
+# rigid_y2 = regOps['rigid_offsets_2nd'][0][0][si]
+# rigid_x2 = regOps['rigid_offsets_2nd'][0][1][si]
+# nonrigid_y2 = regOps['nonrigid_offsets_2nd'][0][0][si,:]
+# nonrigid_x2 = regOps['nonrigid_offsets_2nd'][0][1][si,:]
+
+# frames = np.expand_dims(tempImg, axis=0)
+# # Apply 2-step registration
+# # 1st rigid shift
+# frames = rigid.shift_frame(frame=frames, dy=rigid_y1, dx=rigid_x1)
+# # 1st nonrigid shift
+# yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=regOps['block_size1'])
+# ymax1 = np.tile(nonrigid_y1, (frames.shape[0],1))
+# xmax1 = np.tile(nonrigid_x1, (frames.shape[0],1))
+# frames = nonrigid.transform_data(
+#     data=frames,
+#     nblocks=nblocks,
+#     xblock=xblock,
+#     yblock=yblock,
+#     ymax1=ymax1,
+#     xmax1=xmax1,
+# )
+# # 2nd rigid shift
+# frames = rigid.shift_frame(frame=frames, dy=rigid_y2, dx=rigid_x2)
+# # 2nd nonrigid shift
+# yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=regOps['block_size2'])
+# ymax1 = np.tile(nonrigid_y2, (frames.shape[0],1))
+# xmax1 = np.tile(nonrigid_x2, (frames.shape[0],1))
+# frames = nonrigid.transform_data(
+#     data=frames,
+#     nblocks=nblocks,
+#     xblock=xblock,
+#     yblock=yblock,
+#     ymax1=ymax1,
+#     xmax1=xmax1,
+# )
+
+# # show the result
+# testImg = frames.squeeze()
+# napari.view_image(np.array([regImg, testImg]))
+# #%%
+# napari.view_image(np.array([ops['meanImg'],tempImg]))
+
+# '''
+# It does not match. How come?
+# '''
+# #%%
+# op = {}
+# op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P recordings
+# op['maxregshift'] = 0.3
+# op['smooth_sigma_time'] = 0
+# op['maxregshiftNR'] = 15
+# op['snr_thresh'] = 1.2
+
+# refSession = refSessions[mi]
+# refDir = f'{planeDir}{refSession:03}/plane0/'
+# ops = np.load(f'{refDir}ops.npy', allow_pickle=True).item()
+# refImg = ops['meanImg'].astype(np.float32)
+
+# frames = np.expand_dims(tempImg, axis=0)
+
+
+# op['block_size'] = [128,128]
+# op['maxregshiftNR'] = 12
+# _, frames, rigid_offsets_1st, nonrigid_offsets_1st = s2p_nonrigid_registration(frames, refImg, op)
+# # 2nd pass
+# op['block_size'] = [32,32]
+# op['maxregshiftNR'] = 3
+# _, frames, rigid_offsets_2nd, nonrigid_offsets_2nd = s2p_nonrigid_registration(frames, refImg, op)
+
+# testImg = frames.squeeze()
+# # napari.view_image(np.array([regImg, testImg]))
+
+
+# #%%
+# op = {}
+# op['smooth_sigma'] = 1.15 # ~1 good for 2P recordings, recommend 3-5 for 1P recordings
+# op['maxregshift'] = 0.3
+# op['smooth_sigma_time'] = 0
+# op['maxregshiftNR'] = 15
+# op['snr_thresh'] = 1.2
+
+# refSession = refSessions[mi]
+# refDir = f'{planeDir}{refSession:03}/plane0/'
+# ops = np.load(f'{refDir}ops.npy', allow_pickle=True).item()
+# refImg = ops['meanImg'].astype(np.float32)
+
+# si = 5
+# tempSn = regOps['sessionNames'][si][4:]
+# tempDir = f'{planeDir}{tempSn}/plane0/'
+# ops = np.load(f'{tempDir}ops.npy', allow_pickle=True).item()
+# tempImg = ops['meanImg'].astype(np.float32)
+# regImg = regOps['regImgs'][si,:,:]
+
+# frames = np.expand_dims(tempImg, axis=0)
+
+
+# op['block_size'] = [128,128]
+# op['maxregshiftNR'] = 12
+# frames1, frames2, rigid_offsets_1st, nonrigid_offsets_1st = s2p_nonrigid_registration(frames, refImg, op)
+# # 2nd pass
+# op['block_size'] = [32,32]
+# op['maxregshiftNR'] = 3
+# frames3, frames4, rigid_offsets_2nd, nonrigid_offsets_2nd = s2p_nonrigid_registration(frames2, refImg, op)
+
+# ttestImg = frames4.squeeze()
+
+
+
+# rigid_y1 = rigid_offsets_1st[0][0]
+# rigid_x1 = rigid_offsets_1st[0][1]
+# nonrigid_y1 = nonrigid_offsets_1st[0][0]
+# nonrigid_x1 = nonrigid_offsets_1st[0][1]
+# rigid_y2 = rigid_offsets_2nd[0][0]
+# rigid_x2 = rigid_offsets_2nd[0][1]
+# nonrigid_y2 = nonrigid_offsets_2nd[0][0]
+# nonrigid_x2 = nonrigid_offsets_2nd[0][1]
+
+
+
+# testFrames = np.expand_dims(tempImg, axis=0)
+# # Apply 2-step registration
+# # 1st rigid shift
+# testFrames1 = testFrames.copy()
+# for (fr, dy, dx) in zip(testFrames1, rigid_y1, rigid_x1):
+#     fr[:] = rigid.shift_frame(frame=fr, dy=dy, dx=dx)
+
+# # 1st nonrigid shift
+# yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size1']))
+# ymax1 = np.tile(nonrigid_y1, (testFrames1.shape[0],1))
+# xmax1 = np.tile(nonrigid_x1, (testFrames1.shape[0],1))
+# testFrames2 = nonrigid.transform_data(
+#     data=testFrames1,
+#     nblocks=nblocks,
+#     xblock=xblock,
+#     yblock=yblock,
+#     ymax1=ymax1,
+#     xmax1=xmax1,
+# )
+# # 2nd rigid shift
+# testFrames3 = testFrames2.copy()
+# for (fr, dy, dx) in zip(testFrames3, rigid_y2, rigid_x2):
+#     fr[:] = rigid.shift_frame(frame=fr, dy=dy, dx=dx)
+# # 2nd nonrigid shift
+# yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size2']))
+# ymax1 = np.tile(nonrigid_y2, (frames3.shape[0],1))
+# xmax1 = np.tile(nonrigid_x2, (frames3.shape[0],1))
+# testFrames4 = nonrigid.transform_data(
+#     data=testFrames3,
+#     nblocks=nblocks,
+#     xblock=xblock,
+#     yblock=yblock,
+#     ymax1=ymax1,
+#     xmax1=xmax1,
+# )
+
+# testRegImg = testFrames4.squeeze()
+
+
+
+
+
+# # 1st rigid shift
+# ttestFrames1 = tempImg.copy()
+# ttestFrames1 = rigid.shift_frame(frame=ttestFrames1, dy = rigid_y1[0], dx = rigid_x1[0])
+# # 1st nonrigid shift
+# yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size1']))
+# ymax1 = np.tile(nonrigid_y1, (testFrames1.shape[0],1))
+# xmax1 = np.tile(nonrigid_x1, (testFrames1.shape[0],1))
+# ttestFrames2 = nonrigid.transform_data(
+#     data=np.expand_dims(ttestFrames1, axis=0),
+#     nblocks=nblocks,
+#     xblock=xblock,
+#     yblock=yblock,
+#     ymax1=ymax1,
+#     xmax1=xmax1,
+# )
+# # 2nd rigid shift
+# ttestFrames3 = ttestFrames2[0,:,:].copy()
+# ttestFrames3 = rigid.shift_frame(frame=ttestFrames3, dy = rigid_y2[0], dx = rigid_x2[0])
+# # 2nd nonrigid shift
+# yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size2']))
+# ymax1 = np.tile(nonrigid_y2, (frames3.shape[0],1))
+# xmax1 = np.tile(nonrigid_x2, (frames3.shape[0],1))
+# ttestFrames4 = nonrigid.transform_data(
+#     data=np.expand_dims(ttestFrames3, axis=0),
+#     nblocks=nblocks,
+#     xblock=xblock,
+#     yblock=yblock,
+#     ymax1=ymax1,
+#     xmax1=xmax1,
+# )
+
+# ttestRegImg = ttestFrames4.squeeze()
+
+
+# napari.view_image(np.array([regImg, testImg, ttestImg, testRegImg, ttestRegImg]))
+
+
+
+
+
+# #%%
+# # 1st rigid shift
+# ff = tempImg.copy()
+# ff = rigid.shift_frame(frame=ff, dy = rigid_y1[0], dx = rigid_x1[0])
+# ff = np.expand_dims(ff, axis=0)
+# # 1st nonrigid shift
+# yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=tuple(regOps['block_size1']))
+# ymax1 = np.tile(nonrigid_y1, (ff.shape[0],1))
+# xmax1 = np.tile(nonrigid_x1, (ff.shape[0],1))
+# ff = nonrigid.transform_data(
+#     data=ff,
+#     nblocks=nblocks,
+#     xblock=xblock,
+#     yblock=yblock,
+#     ymax1=ymax1,
+#     xmax1=xmax1,
+# )
+
+# # 2nd rigid shift
+# ff = ff.squeeze()
+# ff = rigid.shift_frame(frame=ff, dy = rigid_y2[0], dx = rigid_x2[0])
+# ff = np.expand_dims(ff,axis=0)
+# # 2nd nonrigid shift
+# yblock, xblock, nblocks, block_size, NRsm = nonrigid.make_blocks(Ly=Ly, Lx=Lx, block_size=regOps['block_size2'])
+# ymax1 = np.tile(nonrigid_y2, (ff.shape[0],1))
+# xmax1 = np.tile(nonrigid_x2, (ff.shape[0],1))
+# ff = nonrigid.transform_data(
+#     data=ff,
+#     nblocks=nblocks,
+#     xblock=xblock,
+#     yblock=yblock,
+#     ymax1=ymax1,
+#     xmax1=xmax1,
+# )
+
+# ff = ff.squeeze()
+
+
+
+# napari.view_image(np.array([regImg, testImg, testRegImg, ttestRegImg, ff, tempImg]))
+
+# #%% show the result
+# viewer = napari.Viewer()
+# viewer.add_image(np.vstack((frames1, testFrames1)), name='1st rigid')
+# viewer.add_image(np.vstack((frames2, testFrames2)), name='1st nonrigid')
+# viewer.add_image(np.vstack((frames3, testFrames3)), name='2nd rigid')
+# viewer.add_image(np.vstack((frames4, testFrames4)), name='2nd nonrigid')
+
+
+# #%%
+# testFrames1 = testFrames.copy()
+# testFrames11 = testFrames.copy()
+# for (fr, dy, dx) in zip(testFrames1, rigid_y1, rigid_x1):
+#     fr[:] = rigid.shift_frame(frame=fr, dy=dy, dx=dx)
+# testFrames11 = rigid.shift_frame(frame=testFrames11[0,:,:], dy = rigid_y1[0], dx = rigid_x1[0])
+# testFrames11 = np.expand_dims(testFrames11, axis=0)
+# if dy == rigid_y1[0]:
+#     print('Same dy')
+# else:
+#     print('Different dy')
+# if dx == rigid_x1[0]:
+#     print('Same dx')
+# else:
+#     print('Different dy')
+    
+# a = testFrames11-testFrames1
 #%% For visual insepction of same-session reg
 #%% Some within-correlation values are as low as <0.3
 # Check those numbers and see what happend on those sessions
