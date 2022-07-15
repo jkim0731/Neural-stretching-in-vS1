@@ -12,7 +12,7 @@ Collect ROIs from multiple sessions that have matching depth
     - Or if there are matching pairs, leave the pair with lower mean perimeter/area ratio
 
 Curate trials from z-drift results
-- Should load the results from z-drfit resutls files
+- Should load the results from z-drfit results files
 - Should also load .trials files
 -- Compare baseline fluorescence change and inferred spikes change against depth change
 
@@ -29,10 +29,12 @@ from suite2p.registration import rigid, nonrigid
 import gc
 gc.enable()
 
-h5Dir = 'D:/TPM/JK/h5/'
-s2pDir = 'D:/TPM/JK/s2p/'
+# h5Dir = 'D:/TPM/JK/h5/'
+h5Dir = 'D:/'
+
 mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
 refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
+expSessions =   [19,    10,   21,   17,     0,      0,      23,     0,      21,     0,      0,      0]
 zoom =          [2,     2,    2,    1.7,    1.7,    1.7,    1.7,    1.7,    1.7,    1.7,    1.7,    1.7]
 freq =          [7.7,   7.7,  7.7,  7.7,    6.1,    6.1,    6.1,    6.1,    7.7,    7.7,    7.7,    7.7]
 
@@ -233,10 +235,12 @@ roiOverlapThresh = 0.5
 # for EITHER of the ROIs, then these two ROIs are defined as matching
 # This is the same approach as in suite2p, and stricter than that of CaImAn (where intersection/union is used instead)
 
-mi = 1
+mi = 6
 mouse = mice[mi]
-vi = 1 # volume index, either 1 or 5
-expTestSnum = 16 # Expert test session number
+vi = 5 # volume index, either 1 or 5
+expTestSnum = expSessions[mi] # Expert test session number
+if mi == 1 & vi == 1: # An exception for JK027 upper layer
+    expTestSnum = 16
 
 # Load z-drift data
 zdrift = np.load(f"{h5Dir}JK{mouse:03}_zdrift_plane{vi}.npy", allow_pickle=True).item()
@@ -263,14 +267,14 @@ ax.set_title(f'JK{mouse:03} plane {vi}\nZ-drift, time normalized per session')
 #%% Set depths (relative value)
 # selDepthsRV = [7,17]  # JK025 upper
 # selDepthsRV = [18,28]
-selDepthsRV = [20,30] # JK027 upper
+# selDepthsRV = [20,30] # JK027 upper
 # selDepthsRV = [25,35]
 # selDepthsRV = [17,27] # JK030 upper
 # selDepthsRV = [22,32]
 # selDepthsRV = [16,26] # JK036 upper
 # selDepthsRV = [12,22]
 # selDepthsRV = [22,32] # JK039 upper
-
+selDepthsRV = [17,27] # JK039 lower
 # selDepthsRV = [27,37] # JK052 upper
 # selDepthsRV = [17,27] # JK052 lower
 
@@ -337,6 +341,8 @@ for pn in range(vi,vi+4):
 # manRmvSi = np.array([19])
 # manRmvSi = np.array([17])
 # manRmvSi = np.array([19])
+# manRmvSi = np.array([])
+manRmvSi = np.array([])
 if len(manRmvSi)>0:
     selectedSi = np.delete(selectedSi, manRmvSi)
     selectedSnums = np.delete(selectedSnums, manRmvSi)

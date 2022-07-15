@@ -25,7 +25,8 @@ from skimage import exposure
 import gc
 gc.enable()
 
-h5Dir = 'D:/TPM/JK/h5/'
+# h5Dir = 'D:/TPM/JK/h5/'
+h5Dir = 'D:/'
 
 mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
 refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
@@ -248,7 +249,7 @@ def clahe_multi(img, kernel_size = None, clip_limit = 0.01, nbins = 2**16):
 
 #%%
 #%% Selecting sessions
-mi = 3
+mi = 6
 mouse = mice[mi]
 refSn = refSessions[mi]
 
@@ -273,7 +274,9 @@ siSorted = siArr[np.argsort(snums)]
 # selDepthsRV = [17,27] # JK030 upper
 # selDepthsRV = [22,32] # JK030 lower
 # selDepthsRV = [16,26] # JK036 upper
-selDepthsRV = [12,22] # JK036 lower
+# selDepthsRV = [12,22] # JK036 lower
+# selDepthsRV = [22,32] # JK039 upper
+selDepthsRV = [17,27] # JK039 lower
 
 # Select sessions
 selectedSi = np.array([si for si in siSorted if \
@@ -291,7 +294,10 @@ selectedSnums = [int(sname.split('_')[1]) for sname in np.array(zdrift['info']['
 # manRmvSi = np.array([]) # JK030 upper
 # manRmvSi = np.array([19]) # JK030 lower
 # manRmvSi = np.array([17]) # JK036 upper
-manRmvSi = np.array([19]) # JK036 lower
+# manRmvSi = np.array([19]) # JK036 lower
+# manRmvSi = np.array([]) # JK039 upper
+manRmvSi = np.array([]) # JK039 lower
+
 if len(manRmvSi)>0:
     selectedSi = np.delete(selectedSi, manRmvSi)
     selectedSnums = np.delete(selectedSnums, manRmvSi)
@@ -677,7 +683,7 @@ if len(manRmvSi)>0:
 #%%
 #%% (2) Serial registration using StackReg and suite2p
 # include re-calculating old registration
-pn = vi+0 # +0, +1, +2, +3
+pn = vi+3 # +0, +1, +2, +3
 prevN = 3
 op = {'smooth_sigma': 1.15, 'maxregshift': 0.3, 'smooth_sigma_time': 0, 'snr_thresh': 1.2, 'block_size_list': [128,32]}
 
