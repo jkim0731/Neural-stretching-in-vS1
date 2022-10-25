@@ -12,7 +12,7 @@ Use pixel-to-pixel correlation (with edge removed) for comparison.
 
 2022/03/02 JK
 """
-
+#%%
 import numpy as np
 from matplotlib import pyplot as plt
 from suite2p.registration import rigid, nonrigid, utils, register
@@ -26,7 +26,7 @@ import gc
 gc.enable()
 
 # h5Dir = 'D:/TPM/JK/h5/'
-h5Dir = 'D:/'
+h5Dir = 'H:/'
 
 mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
 refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
@@ -249,11 +249,11 @@ def clahe_multi(img, kernel_size = None, clip_limit = 0.01, nbins = 2**16):
 
 #%%
 #%% Selecting sessions
-mi = 6
+mi = 2
 mouse = mice[mi]
 refSn = refSessions[mi]
 
-vi = 5 # volume index, either 1 or 5
+vi = 1 # volume index, either 1 or 5
 
 # Load z-drift data
 zdrift = np.load(f"{h5Dir}JK{mouse:03}_zdrift_plane{vi}.npy", allow_pickle=True).item()
@@ -271,12 +271,12 @@ siSorted = siArr[np.argsort(snums)]
 # selDepthsRV = [18,28] # JK025 lower
 # selDepthsRV = [20,30] # JK027 upper
 # selDepthsRV = [25,35] # JK027 lower
-# selDepthsRV = [17,27] # JK030 upper
+selDepthsRV = [17,27] # JK030 upper
 # selDepthsRV = [22,32] # JK030 lower
 # selDepthsRV = [16,26] # JK036 upper
 # selDepthsRV = [12,22] # JK036 lower
 # selDepthsRV = [22,32] # JK039 upper
-selDepthsRV = [17,27] # JK039 lower
+# selDepthsRV = [17,27] # JK039 lower
 
 # Select sessions
 selectedSi = np.array([si for si in siSorted if \
@@ -291,12 +291,12 @@ selectedSnums = [int(sname.split('_')[1]) for sname in np.array(zdrift['info']['
 # manRmvSi = np.array([]) # JK025 lower
 # manRmvSi = np.array(range(7,12)) # JK027 upper
 # manRmvSi = np.array([]) # JK027 lower
-# manRmvSi = np.array([]) # JK030 upper
+manRmvSi = np.array([]) # JK030 upper
 # manRmvSi = np.array([19]) # JK030 lower
 # manRmvSi = np.array([17]) # JK036 upper
 # manRmvSi = np.array([19]) # JK036 lower
 # manRmvSi = np.array([]) # JK039 upper
-manRmvSi = np.array([]) # JK039 lower
+# manRmvSi = np.array([]) # JK039 lower
 
 if len(manRmvSi)>0:
     selectedSi = np.delete(selectedSi, manRmvSi)
@@ -683,7 +683,7 @@ if len(manRmvSi)>0:
 #%%
 #%% (2) Serial registration using StackReg and suite2p
 # include re-calculating old registration
-pn = vi+3 # +0, +1, +2, +3
+pn = vi+0 # +0, +1, +2, +3
 prevN = 3
 op = {'smooth_sigma': 1.15, 'maxregshift': 0.3, 'smooth_sigma_time': 0, 'snr_thresh': 1.2, 'block_size_list': [128,32]}
 
@@ -812,7 +812,8 @@ viewer.add_image(regBiClahe[indOrder,:,:], name=f'serial Bilinear -{prevN} image
 Seems StackReg is superior. Maybe because they maintain linear relationship between pixel positions.
 Serial suite2p shows errors in patches. Still better than the old suite2p (to ref).
 '''
-
+#%%
+pn
 
 #%% (2) Quantification
 # Correlation of the patches, to the reference or to the grand average.

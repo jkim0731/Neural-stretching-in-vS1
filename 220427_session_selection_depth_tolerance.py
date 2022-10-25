@@ -157,4 +157,7 @@ for pn in range(vi,vi+4):
     
     viewer.add_image(regBi, name=f'plane {pn}')
 
+#%% Get session info from previous registration tests
+# 
+
 #%% Manually remove sessions (that clearly does not seem to have matched FOV)
