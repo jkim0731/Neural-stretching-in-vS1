@@ -1,3 +1,4 @@
+#%%
 # -*- coding: utf-8 -*-
 """
 Session selection based on depth tolerance.
@@ -26,12 +27,13 @@ import os, glob, shutil
 from pystackreg import StackReg
 from skimage import exposure
 from suite2p.registration import rigid, nonrigid
+from pathlib import Path
 
 import gc
 gc.enable()
 
 # h5Dir = 'D:/TPM/JK/h5/'
-h5Dir = 'D:/'
+h5Dir = Path(r'F:/')
 
 mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
 refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
@@ -47,7 +49,7 @@ def clahe_each(img: np.float64, kernel_size = None, clip_limit = 0.01, nbins = 2
 depth_tolerance = 10 # in microns
 
 #%% 2. Go to each representative plane (either 1 or 5), gather z-drift across all the sessions.
-mi = 0
+mi = 3
 mouse = mice[mi]
 vi = 1 # volume index, either 1 or 5
 expTestSnum = expSessions[mi] # Expert test session number
@@ -55,7 +57,7 @@ if mi == 1 & vi == 1: # An exception for JK027 upper layer
     expTestSnum = 16
 
 # Load z-drift data
-zdrift = np.load(f"{h5Dir}JK{mouse:03}_zdrift_plane{vi}.npy", allow_pickle=True).item()
+zdrift = np.load(h5Dir / f"JK{mouse:03}_zdrift_plane{vi}.npy", allow_pickle=True).item()
 
 # Select training sessions only
 # Re-order sessions if necessary
@@ -65,6 +67,7 @@ siSorted = siArr[np.argsort(snums)]
 
 #% Manually select depths from z-drift data across sessions and choose corresponding sessions
 allSnums = np.array([int(sn.split('_')[1]) for sn in zdrift['info']['sessionNames']])
+plt.switch_backend('Qt5Agg')
 fig, ax = plt.subplots()
 for xi, si in enumerate(siSorted):
     xrange = np.linspace(xi,xi+1, len(zdrift['zdriftList'][si]))
@@ -82,10 +85,10 @@ ax.set_title(f'JK{mouse:03} plane {vi}\nZ-drift, time normalized per session')
 # selDepthsRV = [25,35]
 # selDepthsRV = [17,27] # JK030 upper
 # selDepthsRV = [22,32]
-# selDepthsRV = [16,26] # JK036 upper
+selDepthsRV = [16,26] # JK036 upper
 # selDepthsRV = [12,22]
 # selDepthsRV = [22,32] # JK039 upper
-selDepthsRV = [17,27] # JK039 lower
+# selDepthsRV = [17,27] # JK039 lower
 # selDepthsRV = [27,37] # JK052 upper
 # selDepthsRV = [17,27] # JK052 lower
 
@@ -126,8 +129,8 @@ topBuffer = 50
 
 viewer = napari.Viewer()
 for pn in range(vi,vi+4):
-    planeDir = f'{h5Dir}{mouse:03}/plane_{pn}/'
-    regFn = f'{planeDir}s2p_nr_reg.npy'
+    planeDir = h5Dir / f'{mouse:03}/plane_{pn}/'
+    regFn = planeDir / f's2p_nr_reg.npy'
     reg = np.load(regFn, allow_pickle=True).item()
     regImgs = reg['regImgs'][selectedSi,topBuffer:-bottomBuffer,leftBuffer:-rightBuffer]
     
@@ -135,7 +138,7 @@ for pn in range(vi,vi+4):
     mimgs = np.zeros_like(regImgs)
     mimgClahe = np.zeros_like(regImgs)
     for si, sn in enumerate(selectedSnums):
-        opsFn = f'{planeDir}{sn:03}/plane0/ops.npy'
+        opsFn = planeDir / f'{sn:03}/plane0/ops.npy'
         ops = np.load(opsFn, allow_pickle=True).item()
         mimgs[si,:,:] = ops['meanImg'][topBuffer:-bottomBuffer,leftBuffer:-rightBuffer]
         mimgClahe[si,:,:] = clahe_each(mimgs[si,:,:])

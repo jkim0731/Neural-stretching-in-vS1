@@ -29,8 +29,8 @@ from suite2p.registration import rigid, nonrigid
 import gc
 gc.enable()
 
-# h5Dir = 'D:/TPM/JK/h5/'
-h5Dir = 'D:/'
+h5Dir = 'E:/TPM/JK/h5/'
+# h5Dir = 'D:/'
 
 mice =          [25,    27,   30,   36,     37,     38,     39,     41,     52,     53,     54,     56]
 refSessions =   [4,     3,    3,    1,      7,      2,      1,      3,      3,      3,      3,      3]
@@ -237,7 +237,7 @@ roiOverlapThresh = 0.5
 
 mi = 6
 mouse = mice[mi]
-vi = 5 # volume index, either 1 or 5
+vi = 1 # volume index, either 1 or 5
 expTestSnum = expSessions[mi] # Expert test session number
 if mi == 1 & vi == 1: # An exception for JK027 upper layer
     expTestSnum = 16
@@ -273,8 +273,8 @@ ax.set_title(f'JK{mouse:03} plane {vi}\nZ-drift, time normalized per session')
 # selDepthsRV = [22,32]
 # selDepthsRV = [16,26] # JK036 upper
 # selDepthsRV = [12,22]
-# selDepthsRV = [22,32] # JK039 upper
-selDepthsRV = [17,27] # JK039 lower
+selDepthsRV = [22,32] # JK039 upper
+# selDepthsRV = [17,27] # JK039 lower
 # selDepthsRV = [27,37] # JK052 upper
 # selDepthsRV = [17,27] # JK052 lower
 

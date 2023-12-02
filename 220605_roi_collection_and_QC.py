@@ -521,7 +521,7 @@ for mi in range(6):
                 'old_result': old_result
                 }
 
-        save_fn = f'{planeDir}JK{mouse:03}_plane{pn}_session_to_session_registartion.npy'
+        save_fn = f'{planeDir}JK{mouse:03}_plane{pn}_session_to_session_registration.npy'
 
         np.save(save_fn, result)
 
