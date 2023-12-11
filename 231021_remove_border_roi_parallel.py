@@ -6,16 +6,25 @@ from matplotlib import pyplot as plt
 import time
 
 
-def save_border_filter_mask(session_tuple, base_dir):
+def save_border_filter_mask(session_tuple, base_dir, test_dir=False):
 
     mouse = session_tuple[0]
     plane = session_tuple[1]
     session = session_tuple[2]
 
     print(f'Processing {mouse:03} plane {plane} session {session}...')
-    final_mask = rrb.border_filter_mask(session_tuple, base_dir)
-    final_mask_fn = base_dir / f'{mouse:03}/plane_{plane}/{session}/plane0/roi/final_mask.npy'
-    np.save(final_mask_fn, final_mask)
+    if test_dir:
+        plane_dir = base_dir / f'{mouse:03}/plane_{plane}/test'
+    else:
+        plane_dir = base_dir / f'{mouse:03}/plane_{plane}'
+    session_dir = plane_dir / f'{session}/plane0/'
+    
+    # final_mask = rrb.border_filter_mask(session_tuple, base_dir)
+    # final_mask_fn = base_dir / f'{mouse:03}/plane_{plane}/{session}/plane0/roi/final_mask.npy'
+    # np.save(final_mask_fn, final_mask)
+    rrb.border_filter_mask(session_tuple, base_dir)
+    final_mask_fn = session_dir / 'roi/final_mask.npy'
+    final_mask = np.load(final_mask_fn)
 
     ops = np.load(base_dir / f'{mouse:03}/plane_{plane}/{session}/plane0/ops.npy', allow_pickle=True).item()
     mean_img = ops['meanImg']
@@ -24,7 +33,7 @@ def save_border_filter_mask(session_tuple, base_dir):
     for i in range(final_mask.shape[-1]):
         ax.contour(final_mask[:,:,i], colors='r', linewidths=0.5)
 
-    save_dir = base_dir / f'{mouse:03}/plane_{plane}' / 'roi_collection_test'
+    save_dir = session_dir / 'roi_collection_test'
     save_dir.mkdir(exist_ok=True)
     fig.savefig(save_dir / f'{mouse:03}_plane_{plane}_{session}.png', dpi=300)
     plt.close(fig)

@@ -2,6 +2,63 @@ import numpy as np
 from pathlib import Path
 from time import time
 
+def process_mask_merging(base_dir, mouse, plane, session, test_dir=False):
+    # if base_dir is str, convert to Path
+    if isinstance(base_dir, str):
+        base_dir = Path(base_dir)
+    if isinstance(session, int):
+        session = f'{session:03}'
+
+    t0 = time()
+    print(f'Processing {mouse:03d}_plane_{plane}_{session}...')
+
+    if test_dir:
+        plane_dir = base_dir / f'{mouse:03}' / f'plane_{plane}' / 'test' / f'{session}' / 'plane0'
+    else:
+        plane_dir = base_dir / f'{mouse:03}' / f'plane_{plane}' / f'{session}' / 'plane0'
+
+    roi_dir = plane_dir / 'roi'
+    if not roi_dir.exists():
+        roi_dir.mkdir()
+    cp_masks = np.load(plane_dir / f'{mouse:03}_plane_{plane}_{session}_cp_masks.npy', allow_pickle=True).item()
+    
+    num_rois_plane = []
+    num_unique_rois_plane = []
+    merged_masks = []
+    for key in cp_masks.keys():
+        mask = cp_masks[key]
+        num_rois = []
+        num_unique_rois = []
+        for i in range(len(mask)-1):
+            if i == 0:
+                new_mask = make_3d_mask(mask[i])
+                num_rois.append(new_mask.shape[2])
+            next_mask = make_3d_mask(mask[i+1])
+            new_mask, unique_roi_num = collate_masks(new_mask, next_mask)
+            num_rois.append(new_mask.shape[2])
+            num_unique_rois.append(unique_roi_num)
+        num_rois_plane.append(num_rois)
+        num_unique_rois_plane.append(num_unique_rois)
+        merged_masks.append(new_mask)
+    np.save(roi_dir / f'num_rois_{mouse:03d}_plane_{plane}_{session}.npy', num_rois_plane)
+    np.save(roi_dir / f'num_unique_rois_{mouse:03d}_plane_{plane}_{session}.npy', num_unique_rois_plane)
+    results_merged_masks = {'meanImg': merged_masks[0],
+                  'meanImgE': merged_masks[1],
+                  'max_proj': merged_masks[2]}
+    np.save(roi_dir / f'merged_masks_{mouse:03d}_plane_{plane}_{session}.npy', results_merged_masks)
+
+    # Create final ROI (without dendrite filtering)
+    mean_and_meanE_mask, unique_roi_num_01 = collate_masks(merged_masks[0], merged_masks[1])
+    final_mask, unique_roi_num_02 = collate_masks(mean_and_meanE_mask, merged_masks[2])
+    final_roi_results = {'mean_and_meanE_mask': mean_and_meanE_mask,
+                         'final_mask': final_mask,
+                         'unique_roi_num_01': unique_roi_num_01,
+                         'unique_roi_num_02': unique_roi_num_02}
+    np.save(roi_dir / f'final_roi_results_{mouse:03d}_plane_{plane}_{session}_wo_dendrite_filtering.npy', final_roi_results)
+    t1 = time()
+    print(f'{mouse:03d}_plane_{plane}_{session} done: {(t1-t0)/60:.2f} minutes.')
+
+    
 def get_iou_ioa_mat(mask_3d1, mask_3d2):
     # mask_3d are ordered to have 1 to n ids
     assert len(mask_3d1.shape) == len(mask_3d2.shape) == 3
@@ -203,55 +260,6 @@ def collate_masks(mask_3d1, mask_3d2, iou_threshold=0.3):
     return new_mask, (num_unique_in_mask1, num_unique_in_mask2)
 
 
-def process_mask_merging(base_dir, mouse, plane, session):
-    # if base_dir is str, convert to Path
-    if isinstance(base_dir, str):
-        base_dir = Path(base_dir)
-
-    t0 = time()
-    print(f'Processing {mouse:03d}_plane_{plane}_{session}...')
-
-    plane_dir = base_dir / f'{mouse:03}' / f'plane_{plane}' / f'{session}' / 'plane0'
-    roi_dir = plane_dir / 'roi'
-    if not roi_dir.exists():
-        roi_dir.mkdir()
-    cp_masks = np.load(plane_dir / f'{mouse:03}_plane_{plane}_{session}_cp_masks.npy', allow_pickle=True).item()
-    
-    num_rois_plane = []
-    num_unique_rois_plane = []
-    merged_masks = []
-    for key in cp_masks.keys():
-        mask = cp_masks[key]
-        num_rois = []
-        num_unique_rois = []
-        for i in range(len(mask)-1):
-            if i == 0:
-                new_mask = make_3d_mask(mask[i])
-                num_rois.append(new_mask.shape[2])
-            next_mask = make_3d_mask(mask[i+1])
-            new_mask, unique_roi_num = collate_masks(new_mask, next_mask)
-            num_rois.append(new_mask.shape[2])
-            num_unique_rois.append(unique_roi_num)
-        num_rois_plane.append(num_rois)
-        num_unique_rois_plane.append(num_unique_rois)
-        merged_masks.append(new_mask)
-    np.save(roi_dir / f'num_rois_{mouse:03d}_plane_{plane}_{session}.npy', num_rois_plane)
-    np.save(roi_dir / f'num_unique_rois_{mouse:03d}_plane_{plane}_{session}.npy', num_unique_rois_plane)
-    results_merged_masks = {'meanImg': merged_masks[0],
-                  'meanImgE': merged_masks[1],
-                  'max_proj': merged_masks[2]}
-    np.save(roi_dir / f'merged_masks_{mouse:03d}_plane_{plane}_{session}.npy', results_merged_masks)
-
-    # Create final ROI (without dendrite filtering)
-    mean_and_meanE_mask, unique_roi_num_01 = collate_masks(merged_masks[0], merged_masks[1])
-    final_mask, unique_roi_num_02 = collate_masks(mean_and_meanE_mask, merged_masks[2])
-    final_roi_results = {'mean_and_meanE_mask': mean_and_meanE_mask,
-                         'final_mask': final_mask,
-                         'unique_roi_num_01': unique_roi_num_01,
-                         'unique_roi_num_02': unique_roi_num_02}
-    np.save(roi_dir / f'final_roi_results_{mouse:03d}_plane_{plane}_{session}_wo_dendrite_filtering.npy', final_roi_results)
-    t1 = time()
-    print(f'{mouse:03d}_plane_{plane}_{session} done: {(t1-t0)/60:.2f} minutes.')
 
 
 def get_filtered_mask(mask, mouse, dendrite_threshold):

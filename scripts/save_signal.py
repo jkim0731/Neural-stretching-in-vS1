@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from suite2p.gui import drawroi
+import time
 
-def save_signal(mouse, plane, session, base_dir):    
+def save_signal(base_dir, mouse, plane, session, test_dir=False):    
     """Extract signal and save the results
     To remove artifacts from laser blocking,
     remove the first and last frame of each trial.
@@ -17,8 +19,18 @@ def save_signal(mouse, plane, session, base_dir):
         session (str): session name
         base_dir (Path): path to the base directory
     """
+    t0 = time.time()
+    if isinstance(base_dir, str):
+        base_dir = Path(base_dir)
+    if isinstance(session, int):
+        session = f'{session:03}'
+    
     plane_dir = base_dir / f'{mouse:03}/plane_{plane}'
-    session_dir = plane_dir / f'{session}/plane0'
+    
+    if test_dir:
+        session_dir = plane_dir / f'test/{session}/plane0'
+    else:
+        session_dir = plane_dir / f'{session}/plane0'
     roi_dir = session_dir / 'roi'
     final_mask_fn = roi_dir / 'final_mask.npy'
     final_mask = np.load(final_mask_fn)
@@ -65,3 +77,5 @@ def save_signal(mouse, plane, session, base_dir):
     np.save(ops_fn, ops)
     np.save(stat_fn, stat)
     np.save(iscell_fn, iscell)
+    t1 = time.time()
+    print(f'save_signal took {t1-t0:.2f} seconds')
