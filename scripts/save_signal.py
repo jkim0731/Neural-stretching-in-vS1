@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from suite2p.gui import drawroi
+from scipy import stats
 import time
 
 def save_signal(base_dir, mouse, plane, session, test_dir=False):    
@@ -77,5 +78,12 @@ def save_signal(base_dir, mouse, plane, session, test_dir=False):
     np.save(ops_fn, ops)
     np.save(stat_fn, stat)
     np.save(iscell_fn, iscell)
+
+    dF = F_reduced - ops['neucoeff'] * Fneu_reduced
+    sk = stats.skew(dF, axis=1)
+    for i, s in enumerate(stat):
+        s['skew'] = sk[i]
+    np.save(roi_dir / 'stat_reduced.npy', stat)
+    
     t1 = time.time()
     print(f'save_signal took {t1-t0:.2f} seconds')
