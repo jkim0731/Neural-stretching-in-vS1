@@ -60,8 +60,10 @@ def assign_touch_response_frames(merged_df, post_touch_frames=1):
     assert len(values_to_assign) == len(merged_df)
     merged_df['touch_response_frame'] = values_to_assign
     merged_df['before_answer_touch_frame'] = False
-    merged_df = merged_df.groupby('trialNum').apply(_get_before_answer_touch_frames)
+    merged_df['before_answer_touch_count'] = np.nan
+    merged_df = merged_df.groupby('trialNum').apply(_get_before_answer_touch_frames)    
     merged_df['after_answer_touch_frame'] = False
+    merged_df['after_answer_touch_count'] = np.nan
     merged_df = merged_df.groupby('trialNum').apply(_get_after_answer_touch_frames)
     return merged_df
 
@@ -82,6 +84,7 @@ def _get_before_answer_touch_frames(x):
     else:
         answer_lick_frame_ind = np.where(x['answer_lick_frame'])[0][0]
         x.iloc[:answer_lick_frame_ind]['before_answer_touch_frame'] = x.iloc[:answer_lick_frame_ind]['touch_response_frame']
+        x.iloc[:answer_lick_frame_ind]['before_answer_touch_count'] = x.iloc[:answer_lick_frame_ind]['touch_count']
     return x
 
 
@@ -91,6 +94,7 @@ def _get_after_answer_touch_frames(x):
     else:
         answer_lick_frame_ind = np.where(x['answer_lick_frame'])[0][0]        
         x.iloc[answer_lick_frame_ind+1:]['after_answer_touch_frame'] = x.iloc[answer_lick_frame_ind+1:]['touch_response_frame']
+        x.iloc[answer_lick_frame_ind+1:]['after_answer_touch_count'] = x.iloc[answer_lick_frame_ind+1:]['touch_count']
     return x
 
 

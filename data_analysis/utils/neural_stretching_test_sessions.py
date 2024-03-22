@@ -5,7 +5,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.metrics import accuracy_score
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-
+import utils.merged_df_annotation as mda
 
 # look at the volume data
 def get_merged_df(ophys_frametime, behavior_frametime):
@@ -260,7 +260,7 @@ def get_cell_inds_varexp_threshold(per_touch_response_xr, glm_result, plane, var
 
 def get_touch_response_xr_varexp_threshold(base_dir, mouse, top_plane, session, touch_window='before_answer',
                                            spk_norm='std', varexp_threshold=0.05,
-                                           post_touch_frames=2):
+                                           post_touch_frames=1):
     assert touch_window in ['before_answer', 'after_answer', 'all'],\
                 'touch_window should be either "before_answer", "after_answer", or "all"'
     per_touch_response_xr, per_touch_response_df = \

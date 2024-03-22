@@ -6,7 +6,7 @@ from time import time
 from multiprocessing import Pool
 import sys
 sys.path.append(r'C:\Users\shires\Dropbox\Works\Projects\2020 Neural stretching in S1\Analysis\codes\data_analysis')
-import neural_stretching_test_sessions as nstest
+import utils.neural_stretching_test_sessions as nstest
 from sklearn.decomposition import PCA
 
 base_dir = Path(r'E:\TPM\JK\h5')
