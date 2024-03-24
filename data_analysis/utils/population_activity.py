@@ -2,10 +2,13 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 import utils.merged_df_annotation as mda
+from pathlib import Path
 
 
-def get_touch_response_volume_xr(base_dir, mouse, top_plane, session, touch_window='before_answer',
-                                 spk_norm='std', post_touch_frames=1):
+def get_touch_response_volume_xr(base_dir: Path, mouse: int, top_plane: int, session: int,
+                                 touch_window='before_answer',
+                                 spk_norm='std',
+                                 post_touch_frames=1):
     assert touch_window in ['before_answer', 'after_answer', 'all'],\
                 'touch_window should be either "before_answer", "after_answer", or "all"'
     planes = range(top_plane, top_plane + 4)
@@ -31,7 +34,7 @@ def get_touch_response_volume_xr(base_dir, mouse, top_plane, session, touch_wind
     return per_touch_response_xr, per_touch_response_df
 
 
-def get_touch_response(base_dir, mouse, session, plane,
+def get_touch_response(base_dir: Path, mouse: int, session: int, plane: int,
                        touch_window='before_answer', spk_norm='std', post_touch_frames=1):
     assert touch_window in ['before_answer', 'after_answer', 'all'],\
                 'touch_window should be either "before_answer", "after_answer", or "all"'
@@ -87,7 +90,8 @@ def get_touch_response(base_dir, mouse, session, plane,
     return per_touch_response_xr, per_touch_response_df
 
 
-def get_touch_response_xr_varexp_threshold(base_dir, mouse, top_plane, session, touch_window='before_answer',
+def get_touch_response_xr_varexp_threshold(base_dir: Path, mouse: int, top_plane: int, session: int,
+                                           touch_window='before_answer',
                                            spk_norm='std', varexp_threshold=0.05,
                                            post_touch_frames=1):
     assert touch_window in ['before_answer', 'after_answer', 'all'],\
@@ -105,7 +109,7 @@ def get_touch_response_xr_varexp_threshold(base_dir, mouse, top_plane, session, 
     return per_touch_response_xr_fit, per_touch_response_df, per_touch_response_xr
 
 
-def get_glm_results(base_dir, mouse, plane, session):
+def get_glm_results(base_dir: Path, mouse: int, plane: int, session: int):
     plane_dir = base_dir / f'{mouse:03}/plane_{plane}'
     roi_dir = plane_dir / f'{session:03}/plane0/roi'
     glm_dir = roi_dir / 'glm/touch_combined'
