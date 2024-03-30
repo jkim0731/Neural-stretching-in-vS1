@@ -8,8 +8,9 @@ import numpy as np
 def calculate_clustering_index(response_xr, response_df,
                                num_dims=np.arange(3,12,2),
                                angles=None,
-                               pca_specific=False,
-                               balance_angles=True,
+                               pca_specific=True,
+                               balance_trials=True,
+                               num_trials_choose=30,
                                num_repeat=100):
     pca = PCA()
     if angles is None:
@@ -40,10 +41,27 @@ def calculate_clustering_index(response_xr, response_df,
             other_group = np.concatenate([pc_all_angles[i] for i in range(num_groups) if i!=gi])
             within_group_dist = squareform(pdist(this_group[:, :num_dim], 'euclidean'))
             between_group_dist = cdist(this_group[:, :num_dim], other_group[:, :num_dim], 'euclidean')
-            num_trials = this_group.shape[0]
-            for ti in range(num_trials):
-                within_group_mean = within_group_dist[ti,:].sum() / (num_trials-1)
-                between_group_mean = between_group_dist[ti,:].mean()
-                clustering_index_trial.append((between_group_mean - within_group_mean) / (between_group_mean + within_group_mean))
+            
+            if balance_trials:
+                num_within_group = this_group.shape[0]
+                num_between_group = other_group.shape[0]
+                for i in range(num_repeat):
+                    within_group_inds = np.random.choice(num_within_group-1, num_trials_choose, replace=False)
+                    between_group_inds = np.random.choice(num_between_group-1, num_trials_choose, replace=False)
+                    within_group_dist_temp = within_group_dist[within_group_inds, :][:, within_group_inds]
+                    between_group_dist_temp = between_group_dist[within_group_inds, :][:, between_group_inds]
+                    clustering_index_repeat = []
+                    for ti in range(num_trials_choose):
+                        within_group_mean = within_group_dist_temp[ti,:].sum() / (num_trials_choose-1)
+                        between_group_mean = between_group_dist_temp[ti,:].mean()
+                        clustering_index_repeat.append((between_group_mean - within_group_mean) / (between_group_mean + within_group_mean))
+                    clustering_index_trial.append(np.mean(clustering_index_repeat))
+            else:
+                num_trials = this_group.shape[0]
+                for ti in range(num_trials):
+                    within_group_mean = within_group_dist[ti,:].sum() / (num_trials-1)
+                    between_group_mean = between_group_dist[ti,:].mean()
+                    clustering_index_trial.append((between_group_mean - within_group_mean) / (between_group_mean + within_group_mean))
+                    
         clustering_index_dims.append(np.mean(clustering_index_trial))
     return clustering_index_dims

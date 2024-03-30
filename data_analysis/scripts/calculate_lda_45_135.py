@@ -63,8 +63,6 @@ if __name__ == '__main__':
             print(f'Processing JK{row.mouse:03} S{int(row.session):02} plane {row.plane}')
             save_lda_45_135(row.mouse, row.plane, int(row.session))
     t1 = time()
-    print(f'Elapsed time: {(t1-t0)/60:.1f} min')
-                     
-    # All expert mice test sessions took 35 min (with 19 processes)
+    print(f'Elapsed time: {(t1-t0)/60:.1f} min')                     
 
 
