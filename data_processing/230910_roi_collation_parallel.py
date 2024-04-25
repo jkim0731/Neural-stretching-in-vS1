@@ -34,7 +34,7 @@ def get_iou_ioa_mat(mask_3d1, mask_3d2):
             ioa_mat2[j, k] = np.sum(intersection_map) / np.sum(temp_roi_ind2_map)
     # going from mask2 to mask1
     # Collect all the roi_inds1 that are not visited by roi_inds2 in the previous step
-    left_roi_inds2 = np.setdiff1d(np.arange(1,mask_3d2.shape[2]), np.unique(visited_roi_inds2))
+    left_roi_inds2 = np.setdiff1d(np.arange(1,mask_3d2.shape[2]+1), np.unique(visited_roi_inds2))
     for temp_roi_ind2 in left_roi_inds2:
         k = temp_roi_ind2 - 1
         temp_roi_ind2_map = np.sum(mask_3d2 == temp_roi_ind2, axis=2)

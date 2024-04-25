@@ -8,9 +8,11 @@ import numpy as np
 def calculate_clustering_index(response_xr, response_df,
                                num_dims=np.arange(3,12,2),
                                angles=None,
-                               pca_specific=True,
-                               balance_trials=True,
-                               num_trials_choose=30,
+                               pca_specific=True, # when using subset of angles (e.g., 
+                               # 45 and 135 from test sessions)
+                               balance_trials=True, # Balance the number of trials
+                               # between angles
+                               num_trials_choose=30, # Used only when balance_trials==True
                                num_repeat=100):
     pca = PCA()
     if angles is None:
@@ -22,6 +24,9 @@ def calculate_clustering_index(response_xr, response_df,
         response_df = response_df.query('pole_angle in @angles')
         angle_tns = response_df.trialNum.values
         response_xr = response_xr.sel(trialNum=angle_tns)
+    # Standardize touch response
+    response_xr = (response_xr - response_xr.mean(axis=0)) / response_xr.std(axis=0)
+        
     pca.fit(response_xr)
     
     pc_all_angles = []
@@ -46,8 +51,10 @@ def calculate_clustering_index(response_xr, response_df,
                 num_within_group = this_group.shape[0]
                 num_between_group = other_group.shape[0]
                 for i in range(num_repeat):
-                    within_group_inds = np.random.choice(num_within_group-1, num_trials_choose, replace=False)
-                    between_group_inds = np.random.choice(num_between_group-1, num_trials_choose, replace=False)
+                    # within_group_inds = np.random.choice(num_within_group-1, num_trials_choose, replace=False)
+                    # between_group_inds = np.random.choice(num_between_group-1, num_trials_choose, replace=False)
+                    within_group_inds = np.random.choice(num_within_group, num_trials_choose, replace=False)
+                    between_group_inds = np.random.choice(num_between_group, num_trials_choose, replace=False)
                     within_group_dist_temp = within_group_dist[within_group_inds, :][:, within_group_inds]
                     between_group_dist_temp = between_group_dist[within_group_inds, :][:, between_group_inds]
                     clustering_index_repeat = []

@@ -22,11 +22,13 @@ def stratify_random_split(inds, stratify_class, num_splits=4):
         class_inds = np.where(stratify_class==classes[ci])[0]
         split_temp = random_split(inds[class_inds], num_split=num_splits)
         for gi in range(num_splits):
-            splits[gi] = np.concatenate([splits[gi], split_temp[gi]])
+            splits[gi] = np.concatenate([splits[gi], split_temp[gi]]).astype(int)
     return splits
 
 
 def lda_cross_validate(X, y, splits_inds):
+    if len(X.shape)==1:
+        X = X[:,np.newaxis]
     num_splits = len(splits_inds)
     accuracies = []
     for si in range(num_splits):
