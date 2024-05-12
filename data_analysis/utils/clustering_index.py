@@ -13,7 +13,7 @@ def calculate_clustering_index(response_xr, response_df,
                                balance_trials=True, # Balance the number of trials
                                # between angles
                                num_trials_choose=30, # Used only when balance_trials==True
-                               num_repeat=100):
+                               num_repeat=10000):
     pca = PCA()
     if angles is None:
         angles = np.unique(response_df.pole_angle)
@@ -71,4 +71,6 @@ def calculate_clustering_index(response_xr, response_df,
                     clustering_index_trial.append((between_group_mean - within_group_mean) / (between_group_mean + within_group_mean))
                     
         clustering_index_dims.append(np.mean(clustering_index_trial))
+    if len(clustering_index_dims) == 1:
+        clustering_index_dims = clustering_index_dims[0]
     return clustering_index_dims
